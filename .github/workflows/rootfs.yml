@@ -182,9 +182,9 @@ jobs:
         
         # 检查构建结果 - 查找动态生成的压缩包
         # 查找所有.7z文件
-        7Z_FILES=$(find . -name "*.7z" | grep -v "sheng-rootfs_build.sh" | head -10)
-        if [[ -n "$7Z_FILES" ]]; then
-          for FILE in $7Z_FILES; do
+        SEVEN_Z_FILES=$(find . -name "*.7z" | grep -v "sheng-rootfs_build.sh" | head -10)
+        if [[ -n "$SEVEN_Z_FILES" ]]; then
+          for FILE in $SEVEN_Z_FILES; do
             FILE_SIZE=$(du -h "$FILE" | cut -f1)
             echo "✅ 找到构建产物: $FILE ($FILE_SIZE)"
             echo "final_filename=$(basename "$FILE")" >> $GITHUB_OUTPUT
