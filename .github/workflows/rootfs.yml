@@ -209,7 +209,6 @@ jobs:
       timeout-minutes: 90
 
     - name: "📤 上传大文件到Artifact"
-      if: ${{ steps.build_rootfs.outputs.file_size_gb >= 2 }}
       uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.build_rootfs.outputs.final_filename }}
