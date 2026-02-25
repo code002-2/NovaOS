@@ -11,7 +11,7 @@ SCRIPT_ARG_COUNT=$#
 if [ $SCRIPT_ARG_COUNT -lt 2 ]; then
     echo "错误: 参数数量不足，期望 2 个参数"
     echo "用法: $0 <发行版类型-变体> <内核版本>"
-    echo "示例: $0 debian-server 6.18"
+    echo "示例: $0 debian-server 6.19"
     exit 1
 fi
 
@@ -357,7 +357,7 @@ if [ "$distro_variant" = "desktop" ]; then
     
     if [ "$distro_type" = "debian" ]; then
         echo "🎨 安装GNOME桌面环境..."
-        if chroot rootdir apt install -qq -y gdm3 phosh gnome-terminal firefox-esr; then
+        if chroot rootdir apt install -qq -y gnome-shell gnome-session gdm3 gnome-terminal nautilus firefox-esr; then
             echo "✅ GNOME桌面环境安装完成 (Debian)"
             mkdir -p rootdir/var/lib/gdm
             touch rootdir/var/lib/gdm/run-initial-setup
