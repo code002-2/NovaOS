@@ -66,7 +66,7 @@ found_packages=0
 missing_packages=""
 
 # 检查每个包文件（使用通配符匹配）
-for pkg in linux-xiaomi-sheng firmware-xiaomi-sheng alsa-xiaomi-sheng; do
+for pkg in linux-xiaomi-sheng firmware-xiaomi-sheng alsa-xiaomi-sheng sheng-devauth.deb; do
     if ls ${pkg}*.deb 1> /dev/null 2>&1; then
         echo "找到: ${pkg}*.deb"
         found_packages=$((found_packages + 1))
@@ -276,6 +276,7 @@ echo "📦 复制内核包到 chroot 环境..."
 cp linux-xiaomi-sheng*.deb rootdir/tmp/
 cp firmware-xiaomi-sheng*.deb rootdir/tmp/
 cp alsa-xiaomi-sheng*.deb rootdir/tmp/
+cp sheng-devauth*.deb rootdir/tmp/
 echo "✅ 内核包复制完成"
 
 # Install custom kernel packages
@@ -298,6 +299,13 @@ if chroot rootdir dpkg -i /tmp/alsa-xiaomi-sheng.deb; then
     echo "✅ alsa-xiaomi-sheng 安装完成"
 else
     echo "❌ alsa-xiaomi-sheng 安装失败"
+    exit 1
+fi
+
+if chroot rootdir dpkg -i /tmp/sheng-devauth.deb; then
+    echo "✅ sheng-devauth 安装完成"
+else
+    echo "❌ sheng-devauth 安装失败"
     exit 1
 fi
 

@@ -161,6 +161,27 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: "📥 Devauth"
+      id: download_devauth
+      run: |
+        
+        # 使用GitHub CLI下载Release文件
+        gh release download "sheng_devauth" \
+          --pattern "*.deb" \
+          --repo "${{ github.repository }}" \
+          --clobber
+        
+        # 验证下载的文件
+        DEB_COUNT=$(ls -1 *.deb 2>/dev/null | wc -l)
+        if [ $DEB_COUNT -eq 0 ]; then
+          echo "❌ 错误：未下载到任何内核包！"
+          exit 1
+        fi
+        
+        echo "✅ 成功下载 $DEB_COUNT 个内核包"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: "🏗️ 执行RootFS构建"
       id: build_rootfs
       run: |
