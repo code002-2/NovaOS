@@ -1,0 +1,80 @@
+name: Build libssc DEB (ARM64)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+
+    env:
+      PKGNAME: libssc
+      PKGVERSION: 0.3.0
+      PKGREL: 1
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential \
+            meson \
+            ninja-build \
+            git \
+            pkg-config \
+            libglib2.0-dev \
+            libprotobuf-c-dev \
+            libqmi-dev \
+            linux-libc-dev
+
+      - name: Clone source repository
+        run: |
+          git clone https://codeberg.org/DylanVanAssche/libssc.git source
+
+      - name: Apply patch
+        run: |
+          cd source
+          wget https://raw.githubusercontent.com/alghiffaryfa19/sheng-sensors-patch/refs/heads/main/libssc-git/wait_for_qmi_service.patch
+          patch -Np1 < ../wait_for_qmi_service.patch || true
+
+      - name: Build project
+        run: |
+          cd source
+          meson setup build --prefix=/usr
+          meson compile -C build
+
+      - name: Install into staging directory
+        run: |
+          cd source
+          DESTDIR=$PWD/stage meson install -C build
+
+      - name: Prepare DEB structure
+        run: |
+          mkdir -p deb/DEBIAN
+          mkdir -p deb/usr
+
+          cp -r source/stage/usr/* deb/usr/
+
+          cat > deb/DEBIAN/control <<EOF
+          Package: ${PKGNAME}
+          Version: ${PKGVERSION}-${PKGREL}
+          Section: libs
+          Priority: optional
+          Architecture: arm64
+          Maintainer: Fauzan Amir Al Ghiffary <alghiffaryfa19@gmail.com>
+          Depends: libglib2.0-0, libprotobuf-c1, libqmi-glib5
+          Description: Library to expose Qualcomm Sensor Core sensors
+           libssc userspace library for Qualcomm SSC.
+          EOF
+
+      - name: Build DEB package
+        run: |
+          dpkg-deb --build deb
+          mv deb.deb ${PKGNAME}_${PKGVERSION}-${PKGREL}_arm64.deb
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libssc-deb
+          path: libssc_*.deb
