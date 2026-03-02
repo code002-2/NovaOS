@@ -92,7 +92,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: fastrpc
-          name: "fastrpc
+          name: "fastrpc"
           draft: false
           prerelease: false
           files: "*.deb"

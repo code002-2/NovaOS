@@ -64,7 +64,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: sensors
-          name: "sensors
+          name: "sensors"
           draft: false
           prerelease: false
           files: "*.deb"
