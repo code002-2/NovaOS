@@ -1,83 +1,172 @@
-# Ubuntu/Debian for Xiaomi K20 Pro (Raphael)
+# Warning
+We're not responsible for bricked devices, missing recovery partitions, dead xiaomi factoryline workers cowboys, dead microSD cards, dead pmics, dead ram, dead display ics, dead cpus, any xiaomi shenanigans, dead cats or dogs, nuclear wars or you getting fired because you forgot to boot back in to android for the alarm.
 
-为小米 K20 Pro (代号: Raphael) 构建的 Ubuntu/Debian 系统镜像，支持在手机上运行完整的桌面Linux系统。
+All the files here have been contributed by other users, here you will find a guide with the working files we managed to get. This is a delicate process, do it under your own risk and follow all the steps carefully.
 
-## 📋 项目特性
-
-- ✅ **多发行版支持**: Ubuntu/Debian Server/Desktop 版本
-- ✅ **完整桌面环境**: GNOME 桌面环境 (桌面版)
-- ✅ **SSH 远程访问**: 服务器版支持 SSH 远程登录
-- ✅ **硬件驱动支持**: 完整的硬件驱动和固件包
-- ✅ **自动构建**: GitHub Actions 自动化构建流程
-- ✅ **一键部署**: 简单的刷机流程
-
-## 🚀 快速开始
-
-下载[刷机框架](https://github.com/cuicanmx/Linux-xiaomi-raphael/releases/download/kernel-6.18/install.7z)
-解压，同时将系统镜像文件 `rootfs.img` 放入解压后的目录。
-点击 `flash.bat` 运行刷机脚本。(注意，此脚本会格式化手机的存储，导致数据丢失，请确保已备份重要数据)
-在一切确认后输入YES将开始安装Linux系统。
+**IF YOU AREN'T COMFORTABLE MODDING YOUR TABLET OR ITS PARTITION TABLE OR YOU ARE PARANOID OF BRICKING YOUR DEVICE CLICK AWAY NOW!!! YOU HAVE BEEN WARNED, YOU ARE ON YOUR OWN IF YOU BRICK YOUR DEVICE!!! AGAIN! YOU HAVE BEEN WARNED!!!**
 
 
-## 🔧 系统配置
+# Installation Guide
+Please follow the guide carefully
 
-### 默认凭据
+1. Make sure you have unlocked the bootloader on your device and make sure only Android OS is installed.
+2. Download the desired rootfs and boot image from releases
 
-**服务器版**:
-- **用户名**: `root`
-- **密码**: `1234`
-- **SSH**: 已启用，允许 root 登录
 
-**桌面版**:
-- **用户名**: `luser`
-- **密码**: `luser`
-- **自动登录**: 已启用
-- **桌面环境**: GNOME 
+# Single Boot
+Maybe later
 
-### 网络配置
+# Dual Boot
+1. Boot to TWRP
+    ```bash
+	adb reboot recovery
+	```
 
-系统已预配置网络设置：
-- DNS: 223.5.5.5
-- 主机名: xiaomi-raphael
-- 网络服务: systemd-networkd
+2. Download parted file in this repo
+4. Push parted file to android storage 
+	```bash
+	adb push <path/to/parted> /sdcard
+	```
+5. Enter adb shell
+	```bash
+	adb shell
+	```
+6. Create linux partition
+	```bash
+	chmod +x /sdcard/parted
+	/sdcard/parted /dev/block/sda
+	```
+7. delete userdata partition, note the number (far left), in my case, userdata is at number 29
+	```bash
+	print
+	rm 29
+	```
+8. Create userdata and linux partition (userdata 128GB and linux 128GB)
+	```bash
+	mkpart userdata ext4 12.7GB 140.7GB
+	mkpart linux ext4 140.7GB -0MB
+	```
 
-## 🔨 构建说明
+9. Check the partition that has been created
+	```bash
+	print
+	```
 
-### GitHub Actions 构建
+10. You will see 29 for userdata and 30 for linux
+11. Exit from parted
+	```bash
+	quit
+	```
+12. Exit from shell
+	```bash
+	exit
+	```
+13. Boot to bootloader
+    ```bash
+	adb reboot bootloader
+	```
 
-项目使用 GitHub Actions 自动化构建，已分解为独立的 Debian 和 Ubuntu 工作流：
+14. Erase dtbo
+    ```bash
+    fastboot erase dtbo_b
+	```
 
-1. **内核构建**: 手动触发 `Build Kernel` 工作流
-2. **Debian 系统镜像构建**: 手动触发 `Build Debian RootFS` 工作流
-3. **Ubuntu 系统镜像构建**: 手动触发 `Build Ubuntu RootFS` 工作流
-4. **发布管理**: 每个构建完成后自动创建独立的 Release
+15. Flash boot image
+    ```bash
+	fastboot flash boot_b boot-*.img
+	```
 
-## ⚙️ 技术细节
-### 关闭屏幕
-echo 1 | sudo tee /sys/class/graphics/fb0/blank
-### 内核版本
-- **当前版本**: 6.18.2
-- **源码仓库**: [GengWei1997/linux](https://github.com/GengWei1997/linux)
-- **分支**: raphael-6.18
+16. Flash rootfs image
+    ```bash
+	fastboot flash linux rootfs*.img
+	```
 
-### 系统要求
-- **设备**: 小米 K20 Pro (Raphael)
-- **存储**: 至少 6GB 可用空间
-- **内存**: 推荐 6GB+ RAM
+17. Slot B activation
+    ```bash
+	fastboot set_active b
+	```
 
-## 🤝 贡献
+18. Reboot
+    ```bash
+	fastboot reboot
+	```
 
-欢迎提交 Issue 和 Pull Request！
+# Switch OS
+1. From Android to Linux
+	- GUI (Requires rooting)
+		- Download app [Here](https://github.com/capntrips/BootControl/releases)
+		- Install app
+		- Open app
+		- Activate Slot B and reboot
 
-### 贡献者
+	- Bootloader (no root, requires PC)
+		- Boot to bootloader
+		- Slot B activation
+		```bash
+		fastboot set_active b
+		fastboot reboot
+		```
 
-特别感谢以下项目的贡献：
-- [@GengWei1997](https://github.com/GengWei1997) - 原raphael适配项目
-- [@map220v](https://github.com/map220v/ubuntu-xiaomi-nabu) - 原项目
-- [@Pc1598](https://github.com/Pc1598) - sm8150-mainline-raphael内核维护
-- [Aospa-raphael-unofficial/linux](https://github.com/Aospa-raphael-unofficial/linux) - 内核项目
-- [sm8150-mainline/linux](https://gitlab.com/sm8150-mainline/linux) - 内核项目
+2. From Linux to Android
+	- Bootloader (Requires PC/Termux ADB-Fastboot from another android device)
+		- Boot to bootloader
+		- Slot A activation
+		```bash
+		fastboot set_active a
+		fastboot reboot
+		```
 
-## ⚠️ 免责声明
+    I do not recommend using qbootctl, as it can brick the device.
 
-本项目仅供学习和研究使用。刷机有风险，操作前请备份重要数据，作者不对任何数据丢失或设备损坏负责。
+# 🔐 Login Credentials
+Default System Credentials
+
+Username: luser
+Password: luser
+
+# Official Keyboard
+Please follow the guide carefully
+
+1. Check service
+    ```bash
+	sudo systemctl status sheng-devauth
+	```
+
+2. If not active
+    ```bash
+	sudo systemctl enable sheng-devauth
+    sudo systemctl start sheng-devauth
+	```
+
+3. Re-attach Keyboard Pogo Pin
+4. Check service again
+    ```bash
+	sudo systemctl status sheng-devauth
+	```
+5. If you see "Sent pad token to kernel driver!". This means the keyboard is ready to use.
+6. Re-attach pin every after boot. This service is used to send tokens to the driver, because the keyboard requires authentication.
+
+
+# Sensors
+Please follow the guide carefully
+
+1. Check service
+    ```bash
+	sudo systemctl status iio-sensor-proxy
+    sudo systemctl status adsprpcd-sensorspd
+	```
+
+2. If not active
+    ```bash
+	sudo systemctl enable iio-sensor-proxy
+    sudo systemctl start iio-sensor-proxy
+    sudo systemctl enable adsprpcd-sensorspd
+    sudo systemctl start adsprpcd-sensorspd
+	```
+
+3. Monitor sensors
+    ```bash
+    monitor-sensor
+	```
+
+4. If you see a change in the value of each sensor, it means the sensor is working.
