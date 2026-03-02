@@ -28,7 +28,7 @@ jobs:
             libqmi-glib-dev \
             linux-libc-dev
 
-        pip3 install --upgrade meson
+          pip3 install --upgrade meson
 
       - name: Clone source repository
         run: |
