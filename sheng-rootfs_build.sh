@@ -282,6 +282,7 @@ cp libssc*.deb rootdir/tmp/
 cp iio*.deb rootdir/tmp/
 cp sheng-sensors*.deb rootdir/tmp/
 cp fast*.deb rootdir/tmp/
+ls rootdir/tmp/
 echo "✅ 内核包复制完成"
 
 # Install custom kernel packages
