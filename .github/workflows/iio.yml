@@ -32,12 +32,33 @@ jobs:
             systemd \
             libsystemd-dev
 
-      # OPTIONAL:
-      # Jika libssc sudah kamu build sebagai .deb di workflow lain,
-      # bisa tambahkan step download & install di sini.
-      #
-      # - name: Install libssc
-      #   run: sudo dpkg -i libssc_*.deb
+      - name: "Download libssc"
+        id: download_libssc
+        run: |
+          
+          # GitHub CLI Release
+          gh release download "libssc" \
+            --pattern "*.deb" \
+            --repo "${{ github.repository }}" \
+            --clobber
+          
+          DEB_COUNT=$(ls -1 *.deb 2>/dev/null | wc -l)
+          if [ $DEB_COUNT -eq 0 ]; then
+            echo "❌ 错误：未下载到任何内核包！"
+            exit 1
+          fi
+          
+          echo "✅ 成功下载 $DEB_COUNT 个内核包"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install libssc
+        run: |
+          sudo dpkg -i *.deb
+          sudo ldconfig
+          
+          echo "🔍 Checking libssc..."
+          pkg-config --modversion libssc || true
 
       - name: Download source
         run: |
