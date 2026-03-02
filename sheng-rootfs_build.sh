@@ -285,6 +285,9 @@ cp fast*.deb rootdir/tmp/
 ls rootdir/tmp/
 echo "✅ 内核包复制完成"
 
+echo "install dep"
+chroot rootdir apt install -y libglib2.0-dev libprotobuf-c-dev libqmi-glib-dev libmbim-glib-dev linux-libc-dev protobuf-compiler protobuf-c-compiler
+
 # Install custom kernel packages
 echo "🔧 安装定制内核包..."
 if chroot rootdir dpkg -i /tmp/linux-xiaomi-sheng.deb; then
