@@ -30,7 +30,12 @@ jobs:
             libgtk-3-dev \
             libpolkit-gobject-1-dev \
             systemd \
-            libsystemd-dev
+            libsystemd-dev \
+            libqmi-glib-dev \
+            libmbim-glib-dev \
+            linux-libc-dev \
+            protobuf-compiler \
+            protobuf-c-compiler
 
       - name: "Download libssc"
         id: download_libssc
