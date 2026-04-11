@@ -1,0 +1,60 @@
+name: 📦 Build Kernel Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        required: true
+        default: "6.19"
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Download all source releases
+      run: |
+        KERNEL_VER=${{ github.event.inputs.kernel_version }}
+
+        mkdir bundle && cd bundle
+
+        echo "⬇️ Download kernel packages"
+        gh release download "kernel-$KERNEL_VER" \
+          --pattern "*.deb" \
+          --repo "${{ github.repository }}" \
+          --clobber || true
+
+        echo "⬇️ Download sheng_devauth"
+        gh release download "sheng_devauth" \
+          --pattern "*.deb" \
+          --repo "${{ github.repository }}" \
+          --clobber || true
+
+        echo "⬇️ Download sensor"
+        gh release download "sensor" \
+          --pattern "*.deb" \
+          --repo "${{ github.repository }}" \
+          --clobber || true
+
+        echo "📂 Final bundle:"
+        ls -lah
+
+        COUNT=$(ls *.deb | wc -l)
+        if [ "$COUNT" -lt 5 ]; then
+          echo "❌ Not enough packages"
+          exit 1
+        fi
+
+    - name: Create bundle release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: kernel-bundle-${{ github.event.inputs.kernel_version }}
+        name: Kernel Bundle ${{ github.event.inputs.kernel_version }}
+        files: bundle/*.deb
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
