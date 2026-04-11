@@ -30,84 +30,98 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
 # 🔥 MULTI FLAVOUR
 FLAVOURS=("lomiri" "gnome")
+BOOTMODES=("single" "dual")
 
 for FLAVOUR in "${FLAVOURS[@]}"; do
+for MODE in "${BOOTMODES[@]}"; do
 
 echo ""
 echo "======================================"
-echo "🚀 BUILD: $FLAVOUR"
+echo "🚀 BUILD: $FLAVOUR - $MODE"
 echo "======================================"
 
-ROOTFS_IMG="${distro_type}_${distro_version}_${FLAVOUR}_${TIMESTAMP}.img"
+ROOTFS_IMG="${distro_type}_${distro_version}_${FLAVOUR}_${MODE}_${TIMESTAMP}.img"
 
-# Cleanup
 rm -rf rootdir || true
 
-# Create image
 truncate -s $IMAGE_SIZE "$ROOTFS_IMG"
 mkfs.ext4 "$ROOTFS_IMG"
 
 mkdir rootdir
 mount -o loop "$ROOTFS_IMG" rootdir
 
-# Bootstrap
+# bootstrap
 debootstrap --arch=arm64 "$distro_version" rootdir http://deb.debian.org/debian/
 
-# Mount
+# mount
 mount --bind /dev rootdir/dev
 mount --bind /dev/pts rootdir/dev/pts
 mount -t proc proc rootdir/proc
 mount -t sysfs sys rootdir/sys
 
-# Base system
+# base packages
 chroot rootdir apt update
 chroot rootdir apt install -y \
     systemd sudo vim wget curl \
     network-manager openssh-server \
     wpasupplicant dbus
 
-# Root password
+echo "📦 Installing device-specific .deb packages..."
+
+# Copy semua .deb ke rootfs
+cp *.deb rootdir/tmp/
+
+# Install dependency dulu (biar aman)
+chroot rootdir apt install -y \
+    libglib2.0-0 \
+    libprotobuf-c1 \
+    libqmi-glib5 \
+    libmbim-glib4 || true
+
+# Install satu per satu (biar gampang debug kalau gagal)
+chroot rootdir dpkg -i /tmp/linux-xiaomi-sheng*.deb || exit 1
+chroot rootdir dpkg -i /tmp/firmware-xiaomi-sheng*.deb || exit 1
+chroot rootdir dpkg -i /tmp/alsa-xiaomi-sheng*.deb || exit 1
+chroot rootdir dpkg -i /tmp/sheng-devauth*.deb || exit 1
+
+chroot rootdir dpkg -i /tmp/libssc*.deb || exit 1
+chroot rootdir dpkg -i /tmp/iio-sensor-proxy*.deb || exit 1
+chroot rootdir dpkg -i /tmp/sheng-sensors*.deb || exit 1
+chroot rootdir dpkg -i /tmp/fastrpc*.deb || exit 1
+
+echo "✅ All custom .deb installed"
+
+# root password
 chroot rootdir bash -c "echo -e '1234\n1234' | passwd root"
 
-# Host
-echo "xiaomi-sheng" > rootdir/etc/hostname
+echo "xiaomi-$FLAVOUR-$MODE" > rootdir/etc/hostname
 
 # =========================
 # 🖥️ DESKTOP
 # =========================
 if [ "$distro_variant" = "desktop" ]; then
 
-    echo "🎨 Installing flavour: $FLAVOUR"
-
     if [ "$FLAVOUR" = "lomiri" ]; then
-
         chroot rootdir apt install -y \
-            lomiri lomiri-desktop-session lomiri-system-settings \
+            lomiri lomiri-session lomiri-system-settings \
             lightdm lightdm-gtk-greeter firefox-esr
 
         chroot rootdir systemctl disable gdm3 2>/dev/null || true
-        chroot rootdir systemctl disable gdm 2>/dev/null || true
         chroot rootdir systemctl enable lightdm
 
-        SESSION="lomiri"
-
     elif [ "$FLAVOUR" = "gnome" ]; then
-
         chroot rootdir apt install -y \
             gnome-shell gnome-session gdm3 firefox-esr
 
         chroot rootdir systemctl enable gdm3
-
-        SESSION="gnome"
-
     fi
 
-    # User
+    # user
     chroot rootdir useradd -m -s /bin/bash luser
     echo "luser:luser" | chroot rootdir chpasswd
     chroot rootdir usermod -aG sudo luser
 
-    # Autologin
+    # autologin
     if [ "$FLAVOUR" = "lomiri" ]; then
         mkdir -p rootdir/etc/lightdm/lightdm.conf.d
         cat > rootdir/etc/lightdm/lightdm.conf.d/50-autologin.conf <<EOF
@@ -118,7 +132,7 @@ user-session=lomiri
 greeter-session=lightdm-gtk-greeter
 EOF
 
-    elif [ "$FLAVOUR" = "gnome" ]; then
+    else
         mkdir -p rootdir/etc/gdm3
         cat > rootdir/etc/gdm3/daemon.conf <<EOF
 [daemon]
@@ -129,16 +143,22 @@ EOF
 
     chroot rootdir systemctl enable NetworkManager
     chroot rootdir systemctl set-default graphical.target
-
 fi
 
-# fstab
-echo "PARTLABEL=linux / ext4 defaults 0 1" > rootdir/etc/fstab
+# =========================
+# 💽 FSTAB (INI KUNCI)
+# =========================
 
-# Clean
+if [ "$MODE" = "dual" ]; then
+    echo "PARTLABEL=linux / ext4 defaults 0 1" > rootdir/etc/fstab
+else
+    echo "PARTLABEL=userdata / ext4 defaults 0 1" > rootdir/etc/fstab
+fi
+
+# clean
 chroot rootdir apt clean
 
-# Unmount
+# unmount
 umount rootdir/dev/pts || true
 umount rootdir/dev || true
 umount rootdir/proc || true
@@ -147,12 +167,14 @@ umount rootdir || true
 
 rm -rf rootdir
 
-# UUID
+# uuid
 tune2fs -U $FILESYSTEM_UUID "$ROOTFS_IMG"
 
 echo "✅ DONE: $ROOTFS_IMG"
-echo "🗜️ 压缩 $ROOTFS_IMG..."
-7z a "${ROOTFS_IMG}.7z" "$ROOTFS_IMG"
-echo "✅ 压缩完成: ${ROOTFS_IMG}.7z"
 
+# compress
+echo "🗜️ compressing..."
+7z a "${ROOTFS_IMG}.7z" "$ROOTFS_IMG"
+
+done
 done
