@@ -106,7 +106,7 @@ if [ "$distro_variant" = "desktop" ]; then
 
     elif [ "$FLAVOUR" = "gnome" ]; then
         chroot rootdir apt install -y \
-            gnome-shell gnome-session gdm3 firefox-esr
+            gnome-shell gnome-session gnome-terminal gdm3 firefox-esr
 
         chroot rootdir systemctl enable gdm3
     fi
