@@ -189,9 +189,9 @@ jobs:
         run: |
           KERNEL_VER="${{ needs.prepare-release.outputs.kernel_version }}"
 
-          echo "⬇️ Download bundle kernel-bundle-$KERNEL_VER"
+          echo "⬇️ Download bundle kernel-bundle-7.0"
 
-          gh release download "kernel-bundle-$KERNEL_VER" \
+          gh release download "kernel-bundle-7.0" \
             --pattern "*.deb" \
             --repo "${{ github.repository }}" \
             --clobber
