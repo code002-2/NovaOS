@@ -263,7 +263,7 @@ jobs:
           fi
         done < release_assets.txt
         
-        # 读取当前Release描述
+        # 读取当前Release描述111
         CURRENT_BODY=$(gh release view ${{ needs.prepare-release.outputs.release_tag }} --json body --jq '.body')
         
         # 更新Release描述，替换镜像文件部分
