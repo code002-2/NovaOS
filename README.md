@@ -36,7 +36,7 @@
 请仔细遵循本指南
 
 1. 确保您已解锁设备的引导加载程序，并且只安装了安卓操作系统。
-2. 从发布页面下载所需的 rootfs 和 boot 镜像。
+2. 从Github Action的Build rootfs下载所需的 rootfs 和 boot 镜像。
 
 # 单系统启动
 也许以后会有。
@@ -61,7 +61,7 @@
     chmod +x /sdcard/parted
     /sdcard/parted /dev/block/sda
     ```
-6. 删除 userdata 分区，记下其编号（最左边），在我这里 userdata 是第 29 个分区
+6. 删除 userdata 分区，记下其编号（最左边），在我这里 userdata 是第 29
     ```bash
     print
     rm 29
