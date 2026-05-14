@@ -57,6 +57,14 @@
 
 ---
 
+##视频测试
+
+【小米pad6spro debian hangover wine+dxvk测试-哔哩哔哩】 https://b23.tv/90orqIS
+
+【小米pad6spro debian蓝牙手柄+vulkan小游戏测试-哔哩哔哩】 https://b23.tv/fjTWYWZ
+
+【小米pad6spro Debian启动！-哔哩哔哩】 https://b23.tv/cWQmge0
+
 ## 📝 快速预览（核心步骤）
 
 如果你想快速了解安装流程，概览如下（详细操作请务必阅读 Wiki）：
