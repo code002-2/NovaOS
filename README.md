@@ -30,7 +30,7 @@
 | 传感器 | 全部       | 正常     | 自动旋转/亮度/霍尔等     |
 | 手写笔 | 支持       | 故障     | 开发中                   |
 
-> 完整功能状态表请查阅 [Wiki 首页](https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/wiki/Home)
+> 完整功能状态表请查阅 [Wiki 首页](https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/wiki/%E9%A6%96%E9%A1%B5)
 
 ---
 
