@@ -56,6 +56,7 @@
 | [⌨️ 官方键盘支持](https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/wiki/官方键盘支持) | Pogo Pin 键盘认证服务配置                |
 | [📡 传感器支持](https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/wiki/传感器支持) | 加速度计、光线传感器等服务启用           |
 | [🧩 推荐的 GNOME 扩展](https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/wiki/推荐的GNOME扩展) | 提升平板触摸体验的扩展列表               |
+| [steam安装教程](https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/wiki/steam) | 适用于linux arm64的steam安装教程
 
 ---
 
