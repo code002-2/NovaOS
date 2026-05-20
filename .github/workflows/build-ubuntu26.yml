@@ -1,4 +1,4 @@
-name: 🐧 Build Ubuntu 26.04 RootFS
+name: 🐧 构建Ubuntu 26.04 RootFS (GNOME/KDE)
 
 on:
   workflow_dispatch:
@@ -15,8 +15,15 @@ on:
           - server-only
           - desktop-only
         default: 'all'
+      desktop_environment:
+        description: '桌面环境 (仅当构建 desktop 时生效)'
+        type: choice
+        options:
+          - gnome
+          - kde
+        default: 'gnome'
       skip_release:
-        description: '跳过创建Release'
+        description: '跳过创建GitHub Release'
         type: boolean
         default: false
 
@@ -40,7 +47,7 @@ jobs:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           name: "Ubuntu 26.04 LTS for Sheng - ${{ steps.tag.outputs.release_tag }}"
           body: |
-            🐧 Ubuntu 26.04 LTS (Resolute) for Sheng
+            🐧 Ubuntu 26.04 LTS (Resolute Raccoon) for Sheng
             
             ---
             
@@ -50,25 +57,24 @@ jobs:
             | Ubuntu版本 | 26.04 LTS (Resolute) |
             | 内核版本 | ${{ github.event.inputs.kernel_version }} |
             | 构建类型 | ${{ github.event.inputs.build_type }} |
+            | 桌面环境 | ${{ github.event.inputs.desktop_environment }} |
             
             ---
             
             ### 🔐 默认凭据
-            
             **服务器版**
             - 用户名: `root`
-            - 密码: `1234` (首次登录请修改)
+            - 密码: `1234`
             
             **桌面版**
             - 用户名: `luser`
             - 密码: `luser`
-            - 自动登录: 已启用
-            - 桌面环境: GNOME Minimal + GDM3
+            - 桌面: ${{ github.event.inputs.desktop_environment == 'gnome' && 'GNOME + GDM3' || 'KDE Plasma + SDDM' }}
             
             ---
             
-            ### 📦 镜像文件
-            构建完成后将出现在下方附件中。
+            ### 🌐 语言环境
+            - 系统语言: 英文 (en_US.UTF-8)
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -96,7 +102,7 @@ jobs:
         run: |
           chmod +x build-ubuntu26-rootfs.sh
           sudo ./build-ubuntu26-rootfs.sh server ${{ github.event.inputs.kernel_version }}
-          SEVEN_Z_FILE=$(ls ubuntu26_*.7z | head -1)
+          SEVEN_Z_FILE=$(ls ubuntu26_server_*.7z | head -1)
           echo "filename=$(basename "$SEVEN_Z_FILE")" >> $GITHUB_OUTPUT
           echo "path=$SEVEN_Z_FILE" >> $GITHUB_OUTPUT
       - name: Upload artifact
@@ -115,7 +121,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-desktop:
-    name: Build Ubuntu 26.04 Desktop
+    name: Build Ubuntu 26.04 Desktop (${{ github.event.inputs.desktop_environment }})
     runs-on: ubuntu-24.04-arm
     needs: prepare-release
     if: |
@@ -136,8 +142,8 @@ jobs:
         id: build
         run: |
           chmod +x build-ubuntu26-rootfs.sh
-          sudo ./build-ubuntu26-rootfs.sh desktop ${{ github.event.inputs.kernel_version }}
-          SEVEN_Z_FILE=$(ls ubuntu26_*.7z | head -1)
+          sudo ./build-ubuntu26-rootfs.sh desktop ${{ github.event.inputs.kernel_version }} ${{ github.event.inputs.desktop_environment }}
+          SEVEN_Z_FILE=$(ls ubuntu26_desktop_${{ github.event.inputs.desktop_environment }}_*.7z | head -1)
           echo "filename=$(basename "$SEVEN_Z_FILE")" >> $GITHUB_OUTPUT
           echo "path=$SEVEN_Z_FILE" >> $GITHUB_OUTPUT
       - name: Upload artifact
