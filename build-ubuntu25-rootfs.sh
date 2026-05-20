@@ -4,10 +4,6 @@ set -e
 IMAGE_SIZE="8G"
 FILESYSTEM_UUID="ee8d3593-59b1-480e-a3b6-4fefb17ee7d8"
 
-# 临时使用 Ubuntu 24.04 LTS (Noble) 确保稳定
-UBUNTU_SUITE="noble"
-UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu"
-
 usage() {
     echo "用法: $0 <variant> <kernel_version>"
     echo "variant: server 或 desktop"
@@ -32,39 +28,31 @@ if [[ "$VARIANT" != "server" && "$VARIANT" != "desktop" ]]; then
 fi
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-ROOTFS_IMG="ubuntu24_${VARIANT}_${TIMESTAMP}.img"   # 文件名改为 ubuntu24
+ROOTFS_IMG="ubuntu24_${VARIANT}_${TIMESTAMP}.img"
 
 echo "=========================================="
 echo "开始构建 Ubuntu 24.04 (Noble) RootFS"
 echo "变体: $VARIANT"
 echo "内核版本: $KERNEL"
 echo "镜像: $ROOTFS_IMG"
-echo "debootstrap 源: $UBUNTU_MIRROR"
-echo "套件: $UBUNTU_SUITE"
 echo "=========================================="
 
-# 清理
 rm -rf rootdir || true
 
-# 创建空白ext4镜像
 truncate -s $IMAGE_SIZE "$ROOTFS_IMG"
 mkfs.ext4 "$ROOTFS_IMG"
 
-# 挂载
 mkdir rootdir
 mount -o loop "$ROOTFS_IMG" rootdir
 
-# debootstrap 基础系统（明确打印实际命令）
-echo "Running: debootstrap --arch=arm64 $UBUNTU_SUITE rootdir $UBUNTU_MIRROR"
-debootstrap --arch=arm64 "$UBUNTU_SUITE" rootdir "$UBUNTU_MIRROR"
+# 关键修复：直接写死 suite 和 mirror，不使用任何变量
+debootstrap --arch=arm64 noble rootdir http://archive.ubuntu.com/ubuntu
 
-# 挂载虚拟文件系统
 mount --bind /dev rootdir/dev
 mount --bind /dev/pts rootdir/dev/pts
 mount -t proc proc rootdir/proc
 mount -t sysfs sys rootdir/sys
 
-# 复制并安装内核包
 if ls *.deb 1> /dev/null 2>&1; then
     cp *.deb rootdir/tmp/
     echo "安装内核及驱动包..."
@@ -73,18 +61,15 @@ else
     echo "警告: 未找到任何.deb包，请确保内核bundle已下载"
 fi
 
-# 基础包安装
 chroot rootdir apt update
 chroot rootdir apt install -y \
     systemd sudo vim wget curl \
     network-manager openssh-server \
     wpasupplicant dbus ubuntu-drivers-common
 
-# root密码
 chroot rootdir bash -c "echo -e '1234\n1234' | passwd root"
 echo "ubuntu24-${VARIANT}" > rootdir/etc/hostname
 
-# 桌面环境配置
 if [ "$VARIANT" = "desktop" ]; then
     chroot rootdir apt install -y \
         ubuntu-desktop-minimal \
@@ -111,15 +96,12 @@ else
     chroot rootdir systemctl set-default multi-user.target
 fi
 
-# fstab
 cat > rootdir/etc/fstab <<EOF
 PARTLABEL=linux / ext4 defaults 0 1
 EOF
 
-# 清理
 chroot rootdir apt clean
 
-# 卸载
 umount rootdir/dev/pts || true
 umount rootdir/dev || true
 umount rootdir/proc || true
@@ -127,13 +109,9 @@ umount rootdir/sys || true
 umount rootdir || true
 rm -rf rootdir
 
-# 固定UUID
 tune2fs -U $FILESYSTEM_UUID "$ROOTFS_IMG"
 
 echo "✅ 镜像生成: $ROOTFS_IMG"
-
-# 压缩
 echo "🗜️ 压缩中..."
 7z a "${ROOTFS_IMG}.7z" "$ROOTFS_IMG"
-
 echo "🎉 完成！输出文件: ${ROOTFS_IMG}.7z"
