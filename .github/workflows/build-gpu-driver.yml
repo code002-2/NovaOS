@@ -33,7 +33,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git python3-pip python3-setuptools \
+            git python3-pip python3-setuptools python3-mako \
             ninja-build pkg-config \
             libdrm-dev libx11-dev libxext-dev libxdamage-dev \
             libxcb-glx0-dev libxcb-shm0-dev libxcb-dri2-0-dev \
