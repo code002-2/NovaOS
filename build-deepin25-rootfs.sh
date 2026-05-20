@@ -6,8 +6,8 @@ FILESYSTEM_UUID="ee8d3593-59b1-480e-a3b6-4fefb17ee7d8"
 
 # Deepin 25 配置
 DEEPIN_SUITE="crimson"
-# 使用官方源（确保有 Release 文件）
-DEEPIN_MIRROR="https://community-packages.deepin.com/deepin"
+# 使用已验证的镜像源（包含 Release 文件）
+DEEPIN_MIRROR="https://mirrors.cernet.edu.cn/deepin/beige"
 
 usage() {
     echo "用法: $0 <kernel_version>"
@@ -40,9 +40,19 @@ mkfs.ext4 "$ROOTFS_IMG"
 mkdir rootdir
 mount -o loop "$ROOTFS_IMG" rootdir
 
-# 使用官方源，跳过 GPG 检查（因 keyring 可能不存在）
-debootstrap --arch=arm64 --no-check-gpg "$DEEPIN_SUITE" rootdir "$DEEPIN_MIRROR"
+# 第一阶段：使用 --foreign 下载并解压基础系统
+debootstrap --arch=arm64 --foreign "$DEEPIN_SUITE" rootdir "$DEEPIN_MIRROR"
 
+# 复制 QEMU 静态二进制（如果需要跨架构，但 runner 是 arm64 则不需要）
+# 以下仅为兼容性保留，实际在 arm64 runner 上可省略
+if [ "$(uname -m)" != "aarch64" ]; then
+    cp /usr/bin/qemu-aarch64-static rootdir/usr/bin/
+fi
+
+# 第二阶段：完成 debootstrap 安装
+chroot rootdir /debootstrap/debootstrap --second-stage
+
+# 挂载虚拟文件系统
 mount --bind /dev rootdir/dev
 mount --bind /dev/pts rootdir/dev/pts
 mount -t proc proc rootdir/proc
@@ -108,6 +118,7 @@ EOF
 chroot rootdir apt clean
 chroot rootdir rm -rf /tmp/*.deb
 
+# 卸载
 umount rootdir/dev/pts || true
 umount rootdir/dev || true
 umount rootdir/proc || true
