@@ -24,9 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static binfmt-support p7zip-full
+        run: sudo apt-get update && sudo apt-get install -y wget p7zip-full
       - name: Build RootFS (Server)
         run: |
           chmod +x build-archlinux-rootfs.sh
@@ -50,9 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static binfmt-support p7zip-full
+        run: sudo apt-get update && sudo apt-get install -y wget p7zip-full
       - name: Build RootFS (Desktop)
         run: |
           chmod +x build-archlinux-rootfs.sh
