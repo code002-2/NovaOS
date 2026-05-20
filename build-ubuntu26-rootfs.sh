@@ -8,13 +8,12 @@ UBUNTU_SUITE="resolute"
 UBUNTU_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu"
 
 usage() {
-    echo "用法: $0 <variant> <kernel_version> [desktop_environment]"
-    echo "variant: server 或 desktop"
-    echo "desktop_environment: gnome 或 kde (仅当 variant=desktop 时有效，默认 gnome)"
+    echo "用法: $0 <kernel_version> <desktop_environment>"
+    echo "desktop_environment: gnome, kde 或 xfce"
     exit 1
 }
 
-if [ $# -lt 2 ]; then
+if [ $# -ne 2 ]; then
     usage
 fi
 
@@ -23,27 +22,20 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-VARIANT=$1
-KERNEL=$2
-DESKTOP_ENV=${3:-gnome}
+KERNEL=$1
+DESKTOP_ENV=$2
 
-if [[ "$VARIANT" != "server" && "$VARIANT" != "desktop" ]]; then
-    echo "错误: variant 必须是 server 或 desktop"
-    exit 1
-fi
-
-if [ "$VARIANT" = "desktop" ] && [[ "$DESKTOP_ENV" != "gnome" && "$DESKTOP_ENV" != "kde" ]]; then
-    echo "错误: desktop_environment 必须是 gnome 或 kde"
+if [[ ! "$DESKTOP_ENV" =~ ^(gnome|kde|xfce)$ ]]; then
+    echo "错误: desktop_environment 必须是 gnome, kde 或 xfce"
     exit 1
 fi
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-ROOTFS_IMG="ubuntu26_${VARIANT}_${DESKTOP_ENV}_${TIMESTAMP}.img"
+ROOTFS_IMG="ubuntu26_${DESKTOP_ENV}_${TIMESTAMP}.img"
 
 echo "=========================================="
 echo "开始构建 Ubuntu 26.04 LTS (Resolute) RootFS"
-echo "变体: $VARIANT"
-echo "桌面环境: $([ "$VARIANT" = "desktop" ] && echo "$DESKTOP_ENV" || echo "none")"
+echo "桌面环境: $DESKTOP_ENV"
 echo "内核版本: $KERNEL"
 echo "语言环境: 英文 (en_US.UTF-8)"
 echo "=========================================="
@@ -75,34 +67,33 @@ if ls *.deb 1> /dev/null 2>&1; then
     chroot rootdir bash -c "apt install -y /tmp/*.deb || true"
 fi
 
-# ============================================
-# 基础包（不安装任何中文相关包）
-# ============================================
+# 基础包
 chroot rootdir apt install -y --no-install-recommends \
     systemd sudo vim-tiny wget curl \
     network-manager openssh-server \
     wpasupplicant dbus
 
-# 设置默认 locale 为英文
+# 设置英文 locale
 chroot rootdir bash -c "echo 'LANG=en_US.UTF-8' > /etc/default/locale"
 chroot rootdir locale-gen en_US.UTF-8
 
 # root 密码
 chroot rootdir bash -c "echo -e '1234\n1234' | passwd root"
-echo "ubuntu26-${VARIANT}" > rootdir/etc/hostname
+echo "ubuntu26-${DESKTOP_ENV}" > rootdir/etc/hostname
 
 # =========================
-# 桌面环境安装（根据 DESKTOP_ENV 选择）
+# 桌面环境安装
 # =========================
-if [ "$VARIANT" = "desktop" ]; then
-    if [ "$DESKTOP_ENV" = "gnome" ]; then
+case "$DESKTOP_ENV" in
+    gnome)
         chroot rootdir apt install -y --no-install-recommends \
             ubuntu-desktop-minimal \
             gnome-terminal \
             firefox \
             gdm3
         DM="gdm3"
-    else   # KDE Plasma
+        ;;
+    kde)
         chroot rootdir apt install -y --no-install-recommends \
             plasma-desktop \
             sddm \
@@ -111,18 +102,31 @@ if [ "$VARIANT" = "desktop" ]; then
             plasma-workspace \
             systemsettings \
             discover \
-            packagekit \
-            packagekit-tools
+            packagekit
+        # 移除了 packagekit-tools（Ubuntu 26.04 中不存在）
         DM="sddm"
-    fi
+        ;;
+    xfce)
+        chroot rootdir apt install -y --no-install-recommends \
+            xfce4 \
+            xfce4-terminal \
+            lightdm \
+            lightdm-gtk-greeter \
+            firefox \
+            mousepad \
+            thunar
+        DM="lightdm"
+        ;;
+esac
 
-    # 创建普通用户
-    chroot rootdir useradd -m -s /bin/bash luser
-    echo "luser:luser" | chroot rootdir chpasswd
-    chroot rootdir usermod -aG sudo luser
+# 创建普通用户
+chroot rootdir useradd -m -s /bin/bash luser
+echo "luser:luser" | chroot rootdir chpasswd
+chroot rootdir usermod -aG sudo luser
 
-    # 自动登录配置
-    if [ "$DM" = "gdm3" ]; then
+# 自动登录配置
+case "$DM" in
+    gdm3)
         mkdir -p rootdir/etc/gdm3
         cat > rootdir/etc/gdm3/daemon.conf <<EOF
 [daemon]
@@ -130,7 +134,8 @@ AutomaticLoginEnable=true
 AutomaticLogin=luser
 EOF
         chroot rootdir systemctl enable gdm3
-    else
+        ;;
+    sddm)
         mkdir -p rootdir/etc/sddm.conf.d
         cat > rootdir/etc/sddm.conf.d/autologin.conf <<EOF
 [Autologin]
@@ -138,16 +143,19 @@ User=luser
 Session=plasma
 EOF
         chroot rootdir systemctl enable sddm
-    fi
+        ;;
+    lightdm)
+        mkdir -p rootdir/etc/lightdm/lightdm.conf.d
+        cat > rootdir/etc/lightdm/lightdm.conf.d/autologin.conf <<EOF
+[Seat:*]
+autologin-user=luser
+autologin-user-timeout=0
+EOF
+        chroot rootdir systemctl enable lightdm
+        ;;
+esac
 
-    # 注意：不配置任何中文输入法和中文环境变量
-    chroot rootdir systemctl set-default graphical.target
-else
-    # 服务器版
-    chroot rootdir systemctl enable ssh
-    chroot rootdir systemctl enable NetworkManager
-    chroot rootdir systemctl set-default multi-user.target
-fi
+chroot rootdir systemctl set-default graphical.target
 
 # fstab
 cat > rootdir/etc/fstab <<EOF
