@@ -6,7 +6,7 @@ on:
       mesa_version:
         description: 'Mesa 版本 (tag或分支，如 main, 24.3, 25.0)'
         required: true
-        default: '24.3'
+        default: 'main'
       build_type:
         description: '构建类型'
         type: choice
@@ -46,7 +46,6 @@ jobs:
       - name: Upgrade meson to >=1.4.0
         run: |
           pip3 install --upgrade meson
-          # 确保 pip 安装的 meson 在 PATH 最前面
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           meson --version
 
@@ -67,7 +66,6 @@ jobs:
             -D platforms=x11,wayland \
             -D gallium-drivers=freedreno \
             -D vulkan-drivers=freedreno \
-            -D freedreno-kgsl=true \
             -D gles1=disabled \
             -D gles2=enabled \
             -D glx=dri
@@ -80,11 +78,8 @@ jobs:
       - name: Package into .deb
         run: |
           cd mesa-source
-          # 创建临时打包目录
           mkdir -p debian/usr/lib/aarch64-linux-gnu/
-          # 安装到临时目录
           DESTDIR=$(pwd)/debian ninja -C builddir/ install
-          # 提取需要打包的驱动相关文件
           mkdir -p debian/DEBIAN
           cat > debian/DEBIAN/control <<EOF
           Package: mesa-freedreno-turnip
@@ -95,11 +90,9 @@ jobs:
            Built from Mesa commit ${{ env.MESA_COMMIT }}.
           Depends: libc6, libdrm2, libx11-6, libxext6, libxdamage1, libxcb-glx0, libxcb-shm0, libxcb-dri2-0, libxcb-dri3-0, libxcb-present0, libxshmfence1, libxxf86vm1, libxrandr2, libxfixes3, libwayland-client0, libvulkan1
           EOF
-          # 计算文件大小并生成md5sums
           cd debian
           find usr -type f -exec md5sum {} \; > DEBIAN/md5sums
           cd ..
-          # 构建 .deb 包
           dpkg-deb --build debian mesa-freedreno-turnip_${{ github.event.inputs.mesa_version }}-git${{ env.MESA_COMMIT }}_arm64.deb
 
       - name: Upload .deb as artifact
