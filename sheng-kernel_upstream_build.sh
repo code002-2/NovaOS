@@ -38,15 +38,15 @@ else
     git clone https://github.com/code002-2/sm8550-mainline.git --depth 150 linux
 fi
 
-echo "🛡️ 正在物理隔离并备份本地验证通过的设备树文件..."
+echo "🛡️ 正在物理隔离并备份本地验证通过的设备树与 7.0 原厂核心头文件..."
 mkdir -p dtb_backup
 cp -r linux/arch/arm64/boot/dts/qcom/* dtb_backup/ 2>/dev/null || true
 
-# 🛡️ 额外备份 7.0 稳定的高通核心驱动，防止被 7.1 冲垮
-echo "🛡️ 正在物理隔离备份 7.0 稳定的高通时钟与存储控制器驱动..."
-mkdir -p qcom_drivers_backup/clk qcom_drivers_backup/ufs
+# 🚨 关键一步：不仅备份驱动，还要备份 7.0 稳定的包含头文件目录 🚨
+mkdir -p qcom_drivers_backup/clk qcom_drivers_backup/ufs qcom_drivers_backup/include_ufs
 cp -r linux/drivers/clk/qcom/* qcom_drivers_backup/clk/ 2>/dev/null || true
 cp -r linux/drivers/ufs/* qcom_drivers_backup/ufs/ 2>/dev/null || true
+cp -r linux/include/ufs/* qcom_drivers_backup/include_ufs/ 2>/dev/null || true
 
 cd linux
 
@@ -76,15 +76,16 @@ else
 fi
 
 # ========================================================
-# 🛡️ 降级防御：强制将破坏的高通底层核心驱动剔除，滚回 7.0 稳定版
+# 🛡️ 降级防御：强制将 UFS 驱动及头文件闭环滚回 7.0 稳定版
 # ========================================================
 echo "♻️ 正在强行还原稳定的高通小米设备树，覆盖 7.1 错乱节点..."
 cp -r ../dtb_backup/* arch/arm64/boot/dts/qcom/ 2>/dev/null || true
 
-echo "♻️ 🦾 正在强行把 7.1 的高通时钟与 UFS 驱动剔除，降级回滚至 7.0 绝对稳定版..."
+echo "♻️ 🦾 正在强行把 7.1 的高通时钟、UFS驱动及配套头文件全套剔除，降级回滚至 7.0 绝对稳定版..."
 cp -r ../qcom_drivers_backup/clk/* drivers/clk/qcom/ 2>/dev/null || true
 cp -r ../qcom_drivers_backup/ufs/* drivers/ufs/ 2>/dev/null || true
-echo "✅ 高通底层驱动底座强制回滚至安全状态"
+cp -r ../qcom_drivers_backup/include_ufs/* include/ufs/ 2>/dev/null || true
+echo "✅ 高通闪存与时钟硬件依赖结构体完美对齐"
 # ========================================================
 
 echo "📥 正在下载基础内核配置文件..."
@@ -197,7 +198,7 @@ else
     echo "Version: ${_kernel_version}" >> "${PKGDIR}/DEBIAN/control"
     echo "Architecture: arm64" >> "${PKGDIR}/DEBIAN/control"
     echo "Maintainer: github-actions" >> "${PKGDIR}/DEBIAN/control"
-    echo "Description: Upstream 7.1 Linux kernel with 7.0 core drivers fallback" >> "${PKGDIR}/DEBIAN/control"
+    echo "Description: Upstream 7.1 Linux kernel with 7.0 complete UFS stack fallback" >> "${PKGDIR}/DEBIAN/control"
 fi
 
 ARCH=arm64
@@ -216,7 +217,7 @@ install -Dm644 System.map $PKGDIR/boot/System.map-${_kernel_version}
     
 chmod +x ../mkbootimg
 
-echo "📱 正在组装专属于你的 [驱动回滚防闪退版] 双系统刷机镜像 boot.img..."
+echo "📱 正在组装专属于你的 [UFS闭环回滚版] 双系统刷机镜像 boot.img..."
 ../mkbootimg --kernel arch/arm64/boot/Image.gz \
              --dtb arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb \
              --cmdline "root=PARTLABEL=linux rootwait console=ttyMSM0,115200 fbcon=nodefer msm_drm.allow_fb_modifiers=1 loglevel=7" \
@@ -250,4 +251,4 @@ if [ -d "sheng-devauth" ]; then
     dpkg-deb --build --root-owner-group sheng-devauth
 fi
 
-echo "🎉 核心底层回滚版内核构建任务圆满结束！"
+echo "🎉 全套 UFS 基础设施闭环对齐，任务圆满结束！"
