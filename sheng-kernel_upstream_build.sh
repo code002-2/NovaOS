@@ -24,7 +24,7 @@ export READELF="llvm-readelf"
 export STRIP="llvm-strip"
 
 echo "🌐 正在克隆你的自定义 sm8550-mainline 仓库..."
-# 拉取 150 深度，确保有足够的共同提交历史用于后面的合并
+# 拉取 150 深度，确保有足够的共同提交历史用于后面的跨仓库合并
 if git clone https://github.com/code002-2/sm8550-mainline.git --branch "sheng-7.0" --depth 150 linux; then
     echo "✅ 成功克隆基础 sheng-7.0 分支"
 else
@@ -35,12 +35,12 @@ fi
 cd linux
 
 # ========================================================
-# 🔄 修正步骤：精准拉取 Linus Mainline 主线最新 7.1 开发树
+# 🔄 步骤：精准拉取 Linus Mainline 官方主线最新 7.1 开发树
 # ========================================================
 echo "📡 正在连接 Linus Mainline 官方主线内核仓库..."
 git remote add upstream-mainline https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 
-echo "📥 【核心修复】拒绝 Tags，仅精准拉取上游 master 分支最新提交..."
+echo "📥 拒绝 Tags 干扰，仅精准拉取上游 master 分支最新提交..."
 # 此时上游的 master 分支就是正在推进的 7.1-rcX 核心代码
 git fetch upstream-mainline master --depth 50 --no-tags
 
@@ -74,8 +74,9 @@ wget https://gitlab.postmarketos.org/alghiffaryfa19/pmaports/-/raw/sheng/device/
 echo "🔄 正在针对新合并的 7.1 内核自动刷新 Kconfig 选项..."
 make ARCH=arm64 LLVM=1 olddefconfig
 
-echo "🔨 开始编译内核 Image, Image.gz 和设备树..."
-make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 Image Image.gz dtbs
+echo "🔨 开始编译内核 Image, Image.gz, 内核模块和设备树..."
+# 【核心修复】显式指定了 modules 编译目标，以此生成编译依赖链所需的 modules.order 文件
+make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 Image Image.gz modules dtbs
 
 _kernel_version="$(make kernelrelease -s)"
 echo "📦 最终构建出的内核版本号为: ${_kernel_version}"
