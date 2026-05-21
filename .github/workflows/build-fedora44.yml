@@ -47,6 +47,15 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y qemu-user-static debootstrap p7zip-full dpkg dnf
+      - name: Fix DNS resolution (workaround for Fedora mirrors)
+        run: |
+          # 备份原始 resolv.conf
+          sudo cp /etc/resolv.conf /etc/resolv.conf.bak
+          # 添加公共 DNS
+          echo "nameserver 8.8.8.8" | sudo tee -a /etc/resolv.conf
+          echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf
+          # 测试解析
+          ping -c 1 mirrors.ustc.edu.cn || true
       - name: Download kernel bundle
         run: |
           gh release download "kernel-bundle-${{ github.event.inputs.kernel_version }}" \
