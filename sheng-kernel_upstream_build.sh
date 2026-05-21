@@ -24,7 +24,7 @@ export READELF="llvm-readelf"
 export STRIP="llvm-strip"
 
 echo "🌐 正在克隆你的自定义 sm8550-mainline 仓库..."
-# 拉取一定的深度（120）以确保能与官方上游找到共同的合并祖先节点
+# 拉取 120 深度，建立合并基础
 if git clone https://github.com/code002-2/sm8550-mainline.git --branch "sheng-7.0" --depth 120 linux; then
     echo "✅ 成功克隆基础 sheng-7.0 分支"
 else
@@ -35,48 +35,35 @@ fi
 cd linux
 
 # ========================================================
-# 🔍 核心步骤：动态查询、筛选并合并 Linux 官方主线最新 Tag
+# 🔄 改进步骤：精准、免 Tag 追踪 Linux 7.1.y 稳定版上游补丁
 # ========================================================
 echo "📡 正在连接 Linux 官方 Stable 稳定版内核仓库..."
 git remote add upstream-stable https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
 
-echo "📥 正在拉取上游最新 Tag 列表..."
-git fetch upstream-stable --tags --depth 20
+echo "📥 【优化】跳过全量 Tags，仅精准拉取 7.1.y 稳定版分支..."
+# --no-tags 可以阻止 Git 下载那数万个死锁的 Tag，仅仅传输最新分支对象
+git fetch upstream-stable linux-7.1.y --depth 20 --no-tags
 
-echo "🔍 正在解析最新的 7.1/7.x 系列 Tag..."
-# 优先寻找是否存在 7.1.x 的稳定版（如 v7.1.1, v7.1.2）；如果没有，则获取最新的 7.1 开发版（如 v7.1-rc5）
-UPSTREAM_TAG=$(git tag -l "v7.1*" | sort -V | tail -n 1)
+UPSTREAM_TARGET="upstream-stable/linux-7.1.y"
+echo "🎯 成功锁定 Linux 上游官方最新补丁分支: $UPSTREAM_TARGET"
 
-# 容错：如果 7.1 分支在上游还未建立，则放宽至最新的 7.x 稳定正式版
-if [ -z "$UPSTREAM_TAG" ]; then
-    echo "⚠️ 未找到 7.1 相关 Tag，正在扩大搜索范围至最新的 7.x 稳定版..."
-    UPSTREAM_TAG=$(git tag -l "v7.*" | grep -v "rc" | sort -V | tail -n 1)
-fi
-
-if [ -z "$UPSTREAM_TAG" ]; then
-    echo "❌ 严重错误：无法从上游获取任何有效的 7.x Tag！"
-    exit 1
-fi
-
-echo "🎯 成功探测到 Linux 上游官方最新补丁 Tag: $UPSTREAM_TAG"
-
-echo "🔀 正在将 [$UPSTREAM_TAG] 的补丁自动无损合并到你的代码中..."
+echo "🔀 正在将最新补丁自动无损合并到你的代码中..."
 # 配置 Actions 虚拟环境的临时 Git 身份
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 
 # 执行合并
-if git merge "$UPSTREAM_TAG" --no-edit; then
-    echo "✅ 完美！上游最新补丁 [$UPSTREAM_TAG] 已无缝合并，未发生代码冲突。"
+if git merge "$UPSTREAM_TARGET" --no-edit; then
+    echo "✅ 完美！上游 7.1.y 分支最新补丁已无缝合并，未发生代码冲突。"
 else
     echo "❌ 警告：在上游更新与你的小米平板移植代码合并时发生冲突！"
     echo "📊 冲突文件总览："
     git status --short
     
-    echo "🔄 正在启动自动化防御机制：放弃冲突冲突项，强制以你的本地移植代码（Ours）为准..."
+    echo "🔄 正在启动自动化防御机制：放弃冲突项，强制以你的本地移植代码（Ours）为准..."
     git merge --abort
     # 使用 -X ours 强行推进，确保你为 sheng 写的设备树和关键驱动不被破坏
-    git merge "$UPSTREAM_TAG" --no-edit -X ours
+    git merge "$UPSTREAM_TARGET" --no-edit -X ours
     echo "⚠️ 已通过 Ours 策略强制完成补丁合并。"
 fi
 # ========================================================
