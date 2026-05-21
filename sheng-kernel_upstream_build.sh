@@ -66,16 +66,16 @@ echo "🩹 [1/4] 正在全量扫荡并修复所有驱动中残留的旧版 of_gp
 find drivers/ sound/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/#include <linux\/of_gpio.h>/#include <linux\/gpio\/consumer.h>/g' {} + 2>/dev/null || true
 echo "✅ 全量 GPIO 头文件清理完成"
 
-echo "📱 [2/4] 正在使用 7.1 标准 gpiod 架构重写触摸屏驱动 (nt36xxx.c)..."
+echo "📱 [2/4] 正在使用 7.1 正统 fwnode 架构重写触摸屏驱动 (nt36xxx.c)..."
 if [ -f drivers/input/touchscreen/nt36532e/nt36xxx.c ]; then
-    # 7.1 彻底抛弃了 of_get_gpio。这里我们通过存活的 of_get_named_gpiod_flags 拿到描述符，再通过 desc_to_gpio 优雅转回 int 编号
-    sed -i 's/ts->irq_gpio = of_get_gpio(np, 0);/ts->irq_gpio = desc_to_gpio(of_get_named_gpiod_flags(np, "novatek,irq-gpio", 0, NULL));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
-    sed -i 's/ts->irq_gpio = of_get_named_gpio(np, "novatek,irq-gpio", 0);/ts->irq_gpio = desc_to_gpio(of_get_named_gpiod_flags(np, "novatek,irq-gpio", 0, NULL));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
+    # 引入 7.1 绝对存活的 fwnode/gpiod 联合转换机制，安全抽取设备树引脚并转回旧驱动所需的 int 编号
+    # 适配 novatek,irq-gpio (设备树中通常对应引脚索引 0)
+    sed -i 's/ts->irq_gpio = .*/ts->irq_gpio = desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,irq", 0, GPIOD_ASIS, "nt36xxx_irq"));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
     
-    # 同理修复可能存在的 reset 引脚获取
-    sed -i 's/of_get_gpio(np, 1)/desc_to_gpio(of_get_named_gpiod_flags(np, "novatek,reset-gpio", 0, NULL))/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
-    sed -i 's/of_get_named_gpio(np, "novatek,reset-gpio", 0)/desc_to_gpio(of_get_named_gpiod_flags(np, "novatek,reset-gpio", 0, NULL))/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
-    echo "✅ nt36xxx.c 7.1 满血 GPIO 适配层注入成功"
+    # 针对可能存在的 reset-gpio 冲突行进行联动清理 (通常对应引脚索引 1 或单独的复位标识)
+    sed -i 's/.*reset-gpio.*/ts->reset_gpio = desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,reset", 0, GPIOD_ASIS, "nt36xxx_reset"));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
+    
+    echo "✅ nt36xxx.c 7.1 终极 GPIO 转换层注入成功"
 fi
 
 echo "🎨 [3/4] 正在修复高通 GPU (msm_gem.c) 7.1 锁管理和共享判定冲突..."
@@ -121,7 +121,7 @@ if [ $MAKE_EXIT_CODE -ne 0 ]; then
     echo "========================================================================="
     exit $MAKE_EXIT_CODE
 else
-    echo "✅ 恭喜！包含满血 GPU 驱动、修复后触摸屏驱动以及 ntsync 的 7.1 内核核心阶段顺利通过！"
+    echo "✅ 恭喜！包含满血 GPU 驱动、全面适配 7.1 的触摸屏驱动以及 ntsync 的核心编译阶段顺利通过！"
 fi
 
 set -e # 恢复错误退出机制
@@ -163,4 +163,13 @@ cd ..
 echo "🧬 拉取固件与外设配置..."
 git clone https://github.com/map220v/sheng-firmware --depth 1
 mkdir -p firmware-xiaomi-sheng/usr/lib/firmware
-cp -r sheng-firmware/* firmware-xiaomi-sheng/usr/lib/
+cp -r sheng-firmware/* firmware-xiaomi-sheng/usr/lib/firmware/
+rm -rf sheng-firmware
+
+git clone https://github.com/alghiffaryfa19/alsa-sheng --depth 1
+cp -r alsa-sheng/* alsa-xiaomi-sheng/
+rm -rf alsa-sheng
+
+echo "📦 正在执行 dpkg-deb 打包..."
+dpkg-deb --build --root-owner-group linux-xiaomi-sheng
+dpkg-deb --build --root-owner-group firmwar
