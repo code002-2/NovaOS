@@ -28,6 +28,11 @@ else
     git clone https://github.com/code002-2/sm8550-mainline.git --depth 150 linux
 fi
 
+# 【安全防御】：在合并前，强行将本地百分百好用的设备树源码提取出来做物理备份
+echo "🛡️ 正在物理隔离并备份本地验证通过的设备树文件..."
+mkdir -p dtb_backup
+cp -r linux/arch/arm64/boot/dts/qcom/* dtb_backup/ 2>/dev/null || true
+
 cd linux
 
 # ========================================================
@@ -54,6 +59,11 @@ else
     git merge "$UPSTREAM_TARGET" --no-edit -X ours
     echo "⚠️ 已通过 Ours 策略强制完成 7.1 补丁合并。"
 fi
+
+# 【防硬砖核心】：用 Ours 强制合并后，主线 7.1 的底层总线文件很可能乱掉。这里我们用备份的稳定设备树直接覆盖回去！
+echo "♻️ 正在强行还原稳定的高通小米设备树，覆盖 7.1 错乱节点..."
+cp -r ../dtb_backup/* arch/arm64/boot/dts/qcom/ 2>/dev/null || true
+echo "✅ 设备树总线结构体强制回滚至安全状态"
 # ========================================================
 
 echo "📥 正在下载基础内核配置文件..."
@@ -81,20 +91,26 @@ if [ -f drivers/gpu/drm/msm/msm_gem.c ]; then
     echo "✅ msm_gem.c 7.1 兼容性补丁应用成功"
 fi
 
-echo "🚀 [4/5] 正在动态向配置中注入 ntsync 满血开启指令..."
+echo "🚀 [4/5] 正在动态向配置中注入高通主线屏幕保活指令..."
 echo "CONFIG_DRM_MSM=y" >> .config
 echo "CONFIG_DRM_MSM_REGISTER_LOGGING=y" >> .config
 echo "CONFIG_DRM_MSM_GPU_STATE=y" >> .config
-echo "CONFIG_NTSYNC=y" >> .config
-echo "CONFIG_ANON_INODES=y" >> .config
+
+# 强行使能基础显示面板与背光拓扑，防止 7.1 乱刷配置导致黑屏
+echo "CONFIG_DRM_PANEL=y" >> .config
+echo "CONFIG_DRM_PANEL_SIMPLE=y" >> .config
+echo "CONFIG_BACKLIGHT_CLASS_DEVICE=y" >> .config
+echo "CONFIG_BACKLIGHT_GPIO=y" >> .config
+
+# 【调试关键】：暂时注释掉 ntsync，先用最保守的内存机制让系统亮屏引导
+# echo "CONFIG_NTSYNC=y" >> .config
+# echo "CONFIG_ANON_INODES=y" >> .config
 
 # ========================================================
 # 🏷️ [5/5] 核心改名：注入独特的专属游戏内核版本后缀
 # ========================================================
 echo "🏷️ 正在向内核配置系统注入自定义版本后缀: -xiaomi-pad-6s-pro-game"
-# 先清除现有的 LOCALVERSION 配置
 sed -i '/CONFIG_LOCALVERSION/d' .config
-# 强行注入你要求的自定义游戏专属内核后缀
 echo 'CONFIG_LOCALVERSION="-xiaomi-pad-6s-pro-game"' >> .config
 
 echo "🔄 正在针对新合并的 7.1 内核自动刷新 Kconfig 选项..."
@@ -103,7 +119,7 @@ make ARCH=arm64 LLVM=1 olddefconfig
 # ========================================================
 # 🔨 精准编译：捕获并打印驱动核心报错
 # ========================================================
-echo "🔨 开始编译内核 Image, Image.gz, 内核模块(含GPU+ntsync)和设备树..."
+echo "🔨 开始编译内核 Image, Image.gz, 内核模块和设备树..."
 make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 Image Image.gz modules dtbs 2> build_error.log
 MAKE_EXIT_CODE=$?
 
@@ -115,7 +131,7 @@ if [ $MAKE_EXIT_CODE -ne 0 ]; then
     echo "========================================================================="
     exit $MAKE_EXIT_CODE
 else
-    echo "✅ 恭喜！全套定制游戏命名的内核核心阶段顺利通过！"
+    echo "✅ 恭喜！高防御力安全调试版内核编译通过！"
 fi
 
 set -e # 恢复错误退出机制
@@ -126,25 +142,21 @@ echo "📦 最终构建出的内核定制版本号为: ${_kernel_version}"
 # ========================================================
 # 📦 打包重构：将旧包名全面迁移至新游戏标识包名
 # ========================================================
-# 动态创建全新的专属游戏包发布工作区，抛弃旧的 linux-xiaomi-sheng 命名
 GAME_PKG_NAME="linux-xiaomi-pad-6s-pro-game"
 PKGDIR="../${GAME_PKG_NAME}"
 
-# 如果原厂包含旧的 DEBIAN 模板目录，我们克隆一份到新包中
 if [ -d "../linux-xiaomi-sheng/DEBIAN" ]; then
     mkdir -p "$PKGDIR"
     cp -r ../linux-xiaomi-sheng/DEBIAN "$PKGDIR/"
-    # 同步修改控制文件内的包名和版本
     sed -i "s/Package:.*/Package: ${GAME_PKG_NAME}/" "${PKGDIR}/DEBIAN/control"
     sed -i "s/Version:.*/Version: ${_kernel_version}/" "${PKGDIR}/DEBIAN/control"
 else
-    # 防御机制：如果不存在，我们现场手搓符合规范的控制信息
     mkdir -p "${PKGDIR}/DEBIAN"
     echo "Package: ${GAME_PKG_NAME}" > "${PKGDIR}/DEBIAN/control"
     echo "Version: ${_kernel_version}" >> "${PKGDIR}/DEBIAN/control"
     echo "Architecture: arm64" >> "${PKGDIR}/DEBIAN/control"
     echo "Maintainer: github-actions" >> "${PKGDIR}/DEBIAN/control"
-    echo "Description: Upstream 7.1 Linux kernel with GPU & ntsync for Xiaomi Pad 6S Pro Game Edition" >> "${PKGDIR}/DEBIAN/control"
+    echo "Description: Upstream 7.1 Linux kernel safety edition for Xiaomi Pad 6S Pro Game" >> "${PKGDIR}/DEBIAN/control"
 fi
 
 ARCH=arm64
@@ -166,11 +178,11 @@ cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb > 
 install -Dm644 Image.gz-dtb_game $PKGDIR/boot/Image.gz-dtb_game
 mv Image.gz-dtb_game zImage_game
 
-echo "📱 正在组装 Android 专属游戏刷机镜像 boot.img..."
+echo "📱 正在组装 Android 安全调试版刷机镜像 boot.img..."
 ../mkbootimg --kernel zImage_game --cmdline "root=PARTLABEL=linux" --base 0x00000000 --kernel_offset 0x00008000 --tags_offset 0x01e00000 --pagesize 4096 --id -o ../boot_pad6spro_game_dualboot.img
 ../mkbootimg --kernel zImage_game --cmdline "root=PARTLABEL=userdata" --base 0x00000000 --kernel_offset 0x00008000 --tags_offset 0x01e00000 --pagesize 4096 --id -o ../boot_pad6spro_game_singleboot.img
 
-echo "🧱 安装内核模块到定制路径..."
+echo "🧱 安装内核模块..."
 make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 INSTALL_MOD_PATH=$PKGDIR modules_install
 rm -rf $PKGDIR/lib/modules/**/build
 cd ..
@@ -185,10 +197,9 @@ git clone https://github.com/alghiffaryfa19/alsa-sheng --depth 1
 cp -r alsa-sheng/* alsa-xiaomi-sheng/
 rm -rf alsa-sheng
 
-# 强行构建通用目录结构，确保打包绝不报错
 mkdir -p "${GAME_PKG_NAME}/DEBIAN" firmware-xiaomi-sheng/DEBIAN alsa-xiaomi-sheng/DEBIAN sheng-devauth/DEBIAN
 
-echo "📦 正在执行全新游戏命名的 dpkg-deb 打包..."
+echo "📦 正在执行打包..."
 dpkg-deb --build --root-owner-group "$GAME_PKG_NAME"
 dpkg-deb --build --root-owner-group firmware-xiaomi-sheng
 dpkg-deb --build --root-owner-group alsa-xiaomi-sheng
@@ -197,4 +208,4 @@ if [ -d "sheng-devauth" ]; then
     dpkg-deb --build --root-owner-group sheng-devauth
 fi
 
-echo "🎉 包含专属游戏命名、ntsync 加速的小米平板 6S Pro 7.1 内核发布任务完美收官！"
+echo "🎉 安全防御调试版内核构建任务圆满结束！"
