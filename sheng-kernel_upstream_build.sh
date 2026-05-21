@@ -4,7 +4,7 @@ set +e # 关闭遇到错误立退，由脚本精细捕获
 WORKSPACE="${1:-$(pwd)}"
 
 # ========================================================
-# ⚡ CCache 极致满血唤醒配置
+# ⚡ CCache 极速编译配置
 # ========================================================
 if [ -z "$CCACHE_DIR" ]; then
     export CCACHE_DIR="/home/runner/.ccache"
@@ -27,9 +27,6 @@ export OBJDUMP="llvm-objdump"
 export READELF="llvm-readelf"
 export STRIP="llvm-strip"
 
-echo "📊 当前 ccache 初始缓存状态统计："
-ccache -s
-
 echo "🌐 正在克隆你的自定义 sm8550-mainline 仓库..."
 if git clone https://github.com/code002-2/sm8550-mainline.git --branch "sheng-7.0" --depth 150 linux; then
     echo "✅ 成功克隆基础 sheng-7.0 分支"
@@ -38,15 +35,9 @@ else
     git clone https://github.com/code002-2/sm8550-mainline.git --depth 150 linux
 fi
 
-echo "🛡️ 正在物理隔离并备份本地验证通过的设备树与 7.0 原厂核心头文件..."
+echo "🛡️ 正在物理隔离并备份本地验证通过的设备树文件..."
 mkdir -p dtb_backup
 cp -r linux/arch/arm64/boot/dts/qcom/* dtb_backup/ 2>/dev/null || true
-
-# 🚨 关键一步：不仅备份驱动，还要备份 7.0 稳定的包含头文件目录 🚨
-mkdir -p qcom_drivers_backup/clk qcom_drivers_backup/ufs qcom_drivers_backup/include_ufs
-cp -r linux/drivers/clk/qcom/* qcom_drivers_backup/clk/ 2>/dev/null || true
-cp -r linux/drivers/ufs/* qcom_drivers_backup/ufs/ 2>/dev/null || true
-cp -r linux/include/ufs/* qcom_drivers_backup/include_ufs/ 2>/dev/null || true
 
 cd linux
 
@@ -75,42 +66,21 @@ else
     echo "⚠️ 已通过 Ours 策略强制完成 7.1 补丁合并。"
 fi
 
-# ========================================================
-# 🛡️ 降级防御：强制将 UFS 驱动及头文件闭环滚回 7.0 稳定版
-# ========================================================
 echo "♻️ 正在强行还原稳定的高通小米设备树，覆盖 7.1 错乱节点..."
 cp -r ../dtb_backup/* arch/arm64/boot/dts/qcom/ 2>/dev/null || true
-
-echo "♻️ 🦾 正在强行把 7.1 的高通时钟、UFS驱动及配套头文件全套剔除，降级回滚至 7.0 绝对稳定版..."
-cp -r ../qcom_drivers_backup/clk/* drivers/clk/qcom/ 2>/dev/null || true
-cp -r ../qcom_drivers_backup/ufs/* drivers/ufs/ 2>/dev/null || true
-cp -r ../qcom_drivers_backup/include_ufs/* include/ufs/ 2>/dev/null || true
-echo "✅ 高通闪存与时钟硬件依赖结构体完美对齐"
+echo "✅ 设备树总线结构体强制回滚至安全状态"
 # ========================================================
 
 echo "📥 正在下载基础内核配置文件..."
 wget https://gitlab.postmarketos.org/alghiffaryfa19/pmaports/-/raw/sheng/device/testing/linux-postmarketos-qcom-sm8550/config-postmarketos-qcom-sm8550.aarch64 -O .config
 
 # ========================================================
-# 🛠️ 核心自愈与强制全内置策略
+# 🛠️ 核心自愈与双系统全内置策略
 # ========================================================
 echo "🩹 [1/5] 正在全量扫荡并修复所有驱动中残留的旧版 of_gpio.h 引用..."
 find drivers/ sound/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/#include <linux\/of_gpio.h>/#include <linux\/gpio\/consumer.h>/g' {} + 2>/dev/null || true
 
-echo "📱 [2/5] 正在使用 7.1 正统 fwnode 架构重写触摸屏驱动 (nt36xxx.c)..."
-if [ -f drivers/input/touchscreen/nt36532e/nt36xxx.c ]; then
-    sed -i 's/ts->irq_gpio = .*/ts->irq_gpio = desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,irq", 0, GPIOD_ASIS, "nt36xxx_irq"));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
-    sed -i 's/.*reset-gpio.*/ts->reset_gpio = desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,reset", 0, GPIOD_ASIS, "nt36xxx_reset"));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
-fi
-
-echo "🎨 [3/5] 正在修复高通 GPU (msm_gem.c) 7.1 锁管理和共享判定冲突..."
-if [ -f drivers/gpu/drm/msm/msm_gem.c ]; then
-    sed -i 's/obj->base.resv/obj->resv/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
-    sed -i 's/(obj->resv != &obj->_resv)/(!obj->import_attach)/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
-    sed -i 's/container_of(obj->resv, struct drm_gem_object, _resv)/obj/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
-fi
-
-echo "🚀 [4/5] 执行核心驱动『模块转内置』硬核手术..."
+echo "🚀 [2/5] 执行内核驱动『全模块转内置』硬核手术..."
 sed -i 's/CONFIG_PINCTRL_SM8550=m/CONFIG_PINCTRL_SM8550=y/g' .config
 sed -i 's/CONFIG_SM_GCC_8550=m/CONFIG_SM_GCC_8550=y/g' .config
 sed -i 's/CONFIG_SM_DISPCC_8550=m/CONFIG_SM_DISPCC_8550=y/g' .config
@@ -129,26 +99,16 @@ echo "CONFIG_FONT_8x16=y" >> .config
 echo "CONFIG_LOGO=y" >> .config
 echo "CONFIG_LOGO_LINUX_CLUT224=y" >> .config
 
-echo "CONFIG_DRM_MSM=y" >> .config
-echo "CONFIG_REGULATOR=y" >> .config
-echo "CONFIG_REGULATOR_QCOM=y" >> .config
-echo "CONFIG_REGULATOR_QCOM_RPMH=y" >> .config
-echo "CONFIG_REGULATOR_QCOM_SMD=y" >> .config
-echo "CONFIG_DRM_PANEL=y" >> .config
-echo "CONFIG_DRM_PANEL_SIMPLE=y" >> .config
-echo "CONFIG_BACKLIGHT_CLASS_DEVICE=y" >> .config
-echo "CONFIG_BACKLIGHT_GPIO=y" >> .config
+# 🚨 B 槽引导特调 CMDLINE：rootwait 延长至无限期等待，强制指定 root 寻址
+echo 'CONFIG_CMDLINE="console=ttyMSM0,115200 earlycon=msm_geni_serial,0xaec00000 root=PARTLABEL=linux rootwait fbcon=nodefer msm_drm.allow_fb_modifiers=1 loglevel=7 panic=0 pm_poweroff.reset_type=1"' >> .config
+echo "CONFIG_CMDLINE_FORCE=y" >> .config
 
 echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> .config
 sed -i 's/CONFIG_DEBUG_INFO=y/# CONFIG_DEBUG_INFO is not set/g' .config
 echo "CONFIG_DEBUG_INFO_NONE=y" >> .config
 
-# 强制锁死基本参数，配合物理 linux 分区识别
-echo 'CONFIG_CMDLINE="console=ttyMSM0,115200 earlycon=msm_geni_serial,0xaec00000 rootwait fbcon=nodefer msm_drm.allow_fb_modifiers=1 loglevel=7 panic=0 pm_poweroff.reset_type=1"' >> .config
-echo "CONFIG_CMDLINE_FORCE=y" >> .config
-
 # ========================================================
-# 🏷️ [5/5] 核心改名
+# 🏷️ [3/5] 核心改名
 # ========================================================
 echo "🏷️ 正在向内核配置系统注入自定义版本后缀: -xiaomi-pad-6s-pro-game"
 sed -i '/CONFIG_LOCALVERSION/d' .config
@@ -163,9 +123,6 @@ make ARCH=arm64 LLVM=1 olddefconfig
 echo "🔨 开始编译内核 Image, Image.gz, 内核模块和设备树..."
 make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 Image Image.gz modules dtbs 2> build_error.log
 MAKE_EXIT_CODE=$?
-
-echo "📊 编译结束，当前 ccache 缓存情况："
-ccache -s
 
 if [ $MAKE_EXIT_CODE -ne 0 ]; then
     echo ""
@@ -182,24 +139,17 @@ _kernel_version="$(make kernelrelease -s)"
 echo "📦 最终构建出的内核定制版本号为: ${_kernel_version}"
 
 # ========================================================
-# 📦 打包重构
+# 📦 打包重构：🚨【标准高通 v2 签名格式，专治 A/B 槽不认】
 # ========================================================
 GAME_PKG_NAME="linux-xiaomi-pad-6s-pro-game"
 PKGDIR="../${GAME_PKG_NAME}"
 
-if [ -d "../linux-xiaomi-sheng/DEBIAN" ]; then
-    mkdir -p "$PKGDIR"
-    cp -r ../linux-xiaomi-sheng/DEBIAN "$PKGDIR/"
-    sed -i "s/Package:.*/Package: ${GAME_PKG_NAME}/" "${PKGDIR}/DEBIAN/control"
-    sed -i "s/Version:.*/Version: ${_kernel_version}/" "${PKGDIR}/DEBIAN/control"
-else
-    mkdir -p "${PKGDIR}/DEBIAN"
-    echo "Package: ${GAME_PKG_NAME}" > "${PKGDIR}/DEBIAN/control"
-    echo "Version: ${_kernel_version}" >> "${PKGDIR}/DEBIAN/control"
-    echo "Architecture: arm64" >> "${PKGDIR}/DEBIAN/control"
-    echo "Maintainer: github-actions" >> "${PKGDIR}/DEBIAN/control"
-    echo "Description: Upstream 7.1 Linux kernel with 7.0 complete UFS stack fallback" >> "${PKGDIR}/DEBIAN/control"
-fi
+mkdir -p "${PKGDIR}/DEBIAN"
+echo "Package: ${GAME_PKG_NAME}" > "${PKGDIR}/DEBIAN/control"
+echo "Version: ${_kernel_version}" >> "${PKGDIR}/DEBIAN/control"
+echo "Architecture: arm64" >> "${PKGDIR}/DEBIAN/control"
+echo "Maintainer: github-actions" >> "${PKGDIR}/DEBIAN/control"
+echo "Description: Upstream 7.1 Linux kernel aligned for Slot B booting" >> "${PKGDIR}/DEBIAN/control"
 
 ARCH=arm64
 mkdir -p $PKGDIR/boot
@@ -212,16 +162,22 @@ else
 fi
 
 install -Dm644 arch/$ARCH/boot/dts/qcom/sm8550-xiaomi-sheng.dtb $PKGDIR/boot/sm8550-xiaomi-sheng.dtb
-install -Dm644 .config $PKGDIR/boot/config-${_kernel_version}
-install -Dm644 System.map $PKGDIR/boot/System.map-${_kernel_version}
     
 chmod +x ../mkbootimg
 
-echo "📱 正在组装专属于你的 [UFS闭环回滚版] 双系统刷机镜像 boot.img..."
+echo "📱 正在组装专属于你的 [高通标准 A/B 槽对齐] 双系统刷机镜像 boot.img..."
+# 🚨 核心改动：废除 cat 拼合，采用纯正的 --dtb 参数，并在 ABL 允许的偏置下完全对齐！
 ../mkbootimg --kernel arch/arm64/boot/Image.gz \
              --dtb arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb \
              --cmdline "root=PARTLABEL=linux rootwait console=ttyMSM0,115200 fbcon=nodefer msm_drm.allow_fb_modifiers=1 loglevel=7" \
-             --base 0x00000000 --kernel_offset 0x00080000 --ramdisk_offset 0x01000000 --tags_offset 0x00000100 --dtb_offset 0x01f00000 --pagesize 4096 --id -o ../boot_pad6spro_game_dualboot.img
+             --base 0x00000000 \
+             --kernel_offset 0x00080000 \
+             --ramdisk_offset 0x01000000 \
+             --tags_offset 0x00000100 \
+             --dtb_offset 0x01f00000 \
+             --pagesize 4096 \
+             --header_version 2 \
+             -o ../boot_pad6spro_game_dualboot.img
 
 cp ../boot_pad6spro_game_dualboot.img ../boot_pad6spro_game_singleboot.img
 
@@ -240,15 +196,9 @@ git clone https://github.com/alghiffaryfa19/alsa-sheng --depth 1
 cp -r alsa-sheng/* alsa-xiaomi-sheng/
 rm -rf alsa-sheng
 
-mkdir -p "${GAME_PKG_NAME}/DEBIAN" firmware-xiaomi-sheng/DEBIAN alsa-xiaomi-sheng/DEBIAN sheng-devauth/DEBIAN
-
 echo "📦 正在执行打包..."
 dpkg-deb --build --root-owner-group "$GAME_PKG_NAME"
 dpkg-deb --build --root-owner-group firmware-xiaomi-sheng
 dpkg-deb --build --root-owner-group alsa-xiaomi-sheng
 
-if [ -d "sheng-devauth" ]; then
-    dpkg-deb --build --root-owner-group sheng-devauth
-fi
-
-echo "🎉 全套 UFS 基础设施闭环对齐，任务圆满结束！"
+echo "🎉 B 槽满血对齐版内核构建任务圆满结束！"
