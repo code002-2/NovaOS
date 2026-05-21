@@ -68,7 +68,7 @@ echo "📥 正在下载基础内核配置文件..."
 wget https://gitlab.postmarketos.org/alghiffaryfa19/pmaports/-/raw/sheng/device/testing/linux-postmarketos-qcom-sm8550/config-postmarketos-qcom-sm8550.aarch64 -O .config
 
 # ========================================================
-# 🛠️ 核心自愈与挂载/闪存保活（解决MI后黑屏）
+# 🛠️ 核心自愈与强制全内置策略（专治亮MI后黑屏）
 # ========================================================
 echo "🩹 [1/5] 正在全量扫荡并修复所有驱动中残留的旧版 of_gpio.h 引用..."
 find drivers/ sound/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/#include <linux\/of_gpio.h>/#include <linux\/gpio\/consumer.h>/g' {} + 2>/dev/null || true
@@ -86,30 +86,40 @@ if [ -f drivers/gpu/drm/msm/msm_gem.c ]; then
     sed -i 's/container_of(obj->resv, struct drm_gem_object, _resv)/obj/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
 fi
 
-echo "🚀 [4/5] 正在注入高通显示核心、电源、以及【UFS 存储控制器锁死配置】..."
+echo "🚀 [4/5] 执行核心驱动『模块转内置』硬核手术..."
+# 1. 强行把高通 8 Gen 2 核心时钟、引脚、互联总线从模块(=m)砸成内置(=y)
+sed -i 's/CONFIG_PINCTRL_SM8550=m/CONFIG_PINCTRL_SM8550=y/g' .config
+sed -i 's/CONFIG_SM_GCC_8550=m/CONFIG_SM_GCC_8550=y/g' .config
+sed -i 's/CONFIG_SM_DISPCC_8550=m/CONFIG_SM_DISPCC_8550=y/g' .config
+sed -i 's/CONFIG_INTERCONNECT_QCOM_SM8550=m/CONFIG_INTERCONNECT_QCOM_SM8550=y/g' .config
+sed -i 's/CONFIG_QCOM_RPMHPD=m/CONFIG_QCOM_RPMHPD=y/g' .config
+
+# 2. 强行把 UFS 闪存核心栈从模块(=m)转换为内置(=y)
+sed -i 's/CONFIG_SCSI_UFS_QCOM=m/CONFIG_SCSI_UFS_QCOM=y/g' .config
+sed -i 's/CONFIG_SCSI_UFSHCD_PLATFORM=m/CONFIG_SCSI_UFSHCD_PLATFORM=y/g' .config
+sed -i 's/CONFIG_SCSI_UFSHCD=m/CONFIG_SCSI_UFSHCD=y/g' .config
+
+# 3. 强开文本虚拟终端控制台与 Framebuffer 终端（消灭亮MI后瞎子黑屏）
+echo "CONFIG_VT=y" >> .config
+echo "CONFIG_VT_CONSOLE=y" >> .config
+echo "CONFIG_FRAMEBUFFER_CONSOLE=y" >> .config
+echo "CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY=y" >> .config
+echo "CONFIG_FONT_8x16=y" >> .config
+echo "CONFIG_LOGO=y" >> .config
+echo "CONFIG_LOGO_LINUX_CLUT224=y" >> .config # 强制开启开机 Linux 小企鹅图标
+
+# 4. 强行锁死高通显示核心与底层 Regulator 电源
 echo "CONFIG_DRM_MSM=y" >> .config
-
-# 强行锁死高通 UFS 闪存驱动与物理层，确保内核能认出硬盘并读取 rootfs
-echo "CONFIG_SCSI=y" >> .config
-echo "CONFIG_BLK_DEV_SD=y" >> .config
-echo "CONFIG_SCSI_UFSHCD=y" >> .config
-echo "CONFIG_SCSI_UFSHCD_PLATFORM=y" >> .config
-echo "CONFIG_SCSI_UFS_QCOM=y" >> .config
-echo "CONFIG_SCSI_UFS_CRYPTO=y" >> .config
-
-# 强行锁死高通电源总线控制器
 echo "CONFIG_REGULATOR=y" >> .config
 echo "CONFIG_REGULATOR_QCOM=y" >> .config
 echo "CONFIG_REGULATOR_QCOM_RPMH=y" >> .config
 echo "CONFIG_REGULATOR_QCOM_SMD=y" >> .config
-
-# 基础显示面板与背光保活
 echo "CONFIG_DRM_PANEL=y" >> .config
 echo "CONFIG_DRM_PANEL_SIMPLE=y" >> .config
 echo "CONFIG_BACKLIGHT_CLASS_DEVICE=y" >> .config
 echo "CONFIG_BACKLIGHT_GPIO=y" >> .config
 
-# 保持极致瘦身，确保内核体积不复胖
+# 保持极致瘦身
 echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> .config
 sed -i 's/CONFIG_DEBUG_INFO=y/# CONFIG_DEBUG_INFO is not set/g' .config
 echo "CONFIG_DEBUG_INFO_NONE=y" >> .config
@@ -146,7 +156,7 @@ _kernel_version="$(make kernelrelease -s)"
 echo "📦 最终构建出的内核定制版本号为: ${_kernel_version}"
 
 # ========================================================
-# 📦 打包重构：注入 UFS 异步挂载等待参数
+# 📦 打包重构
 # ========================================================
 GAME_PKG_NAME="linux-xiaomi-pad-6s-pro-game"
 PKGDIR="../${GAME_PKG_NAME}"
@@ -162,7 +172,7 @@ else
     echo "Version: ${_kernel_version}" >> "${PKGDIR}/DEBIAN/control"
     echo "Architecture: arm64" >> "${PKGDIR}/DEBIAN/control"
     echo "Maintainer: github-actions" >> "${PKGDIR}/DEBIAN/control"
-    echo "Description: Upstream 7.1 Linux kernel with UFS keepalive for Xiaomi Pad 6S Pro Game" >> "${PKGDIR}/DEBIAN/control"
+    echo "Description: Upstream 7.1 Linux kernel full built-in for Xiaomi Pad 6S Pro Game" >> "${PKGDIR}/DEBIAN/control"
 fi
 
 ARCH=arm64
@@ -184,12 +194,11 @@ cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb > 
 install -Dm644 Image.gz-dtb_game $PKGDIR/boot/Image.gz-dtb_game
 mv Image.gz-dtb_game zImage_game
 
-# 🚨 【CMDLINE 重大升级】：
-# 强行追加 rootwait：无限期等待 UFS 闪存准备就绪再尝试挂载，防止挂载过快导致 Panic
-# 强行追加 msm_drm.allow_fb_modifiers=1：允许旧版 framebuffer 格式平滑过渡到 7.1
-NEW_CMDLINE="console=ttyMSM0,115200 earlycon=msm_geni_serial,0xaec00000 root=PARTLABEL=linux rootwait msm_drm.allow_fb_modifiers=1 loglevel=7 panic=0 pm_poweroff.reset_type=1"
+# 🚨 【CMDLINE 注入文本控制台强制绑定】
+# 强行追加 fbcon=nodefer：不允许内核延迟初始化控制台，一经接管立刻强制输出画面
+NEW_CMDLINE="console=ttyMSM0,115200 earlycon=msm_geni_serial,0xaec00000 root=PARTLABEL=linux rootwait fbcon=nodefer msm_drm.allow_fb_modifiers=1 loglevel=7 panic=0 pm_poweroff.reset_type=1"
 
-echo "📱 正在组装 Android [UFS闪存防掉电挂载] 刷机镜像 boot.img..."
+echo "📱 正在组装 Android [全内置保活文本终端] 刷机镜像 boot.img..."
 ../mkbootimg --kernel zImage_game --cmdline "${NEW_CMDLINE}" --base 0x00000000 --kernel_offset 0x00080000 --ramdisk_offset 0x01000000 --tags_offset 0x00000100 --dtb_offset 0x01f00000 --pagesize 4096 --id -o ../boot_pad6spro_game_dualboot.img
 ../mkbootimg --kernel zImage_game --cmdline "${NEW_CMDLINE}" --base 0x00000000 --kernel_offset 0x00080000 --ramdisk_offset 0x01000000 --tags_offset 0x00000100 --dtb_offset 0x01f00000 --pagesize 4096 --id -o ../boot_pad6spro_game_singleboot.img
 
@@ -219,4 +228,4 @@ if [ -d "sheng-devauth" ]; then
     dpkg-deb --build --root-owner-group sheng-devauth
 fi
 
-echo "🎉 闪存保活版内核构建任务圆满结束！"
+echo "🎉 全内置保活版内核构建任务圆满结束！"
