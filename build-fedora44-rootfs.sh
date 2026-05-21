@@ -4,7 +4,7 @@ set -e
 IMAGE_SIZE="8G"
 FILESYSTEM_UUID="ee8d3593-59b1-480e-a3b6-4fefb17ee7d8"
 FEDORA_VERSION="44"
-# 关键修改：使用 Fedora 官方 CDN，同步最快
+# 使用官方 CDN 源（同步最快）
 FEDORA_MIRROR="https://download.fedoraproject.org/pub/fedora/linux"
 
 usage() { echo "用法: $0 <kernel_version>"; exit 1; }
@@ -16,7 +16,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 ROOTFS_IMG="fedora44_${TIMESTAMP}.img"
 
 echo "=========================================="
-echo "开始构建 Fedora $FEDORA_VERSION (ARM64) RootFS (使用官方源)"
+echo "开始构建 Fedora $FEDORA_VERSION (ARM64) RootFS (官方源)"
 echo "将从 kernel-bundle-$KERNEL 中提取固件并注入"
 echo "=========================================="
 
@@ -51,7 +51,7 @@ mkdir rootdir
 mount -o loop "$ROOTFS_IMG" rootdir
 ROOTDIR_ABS=$(realpath rootdir)
 
-# --- 关键修改：使用官方源进行基础系统安装 ---
+# --- 使用 dnf 安装基础系统（官方源）---
 dnf --installroot="$ROOTDIR_ABS" \
     --releasever=$FEDORA_VERSION \
     --forcearch=aarch64 \
@@ -80,7 +80,8 @@ mount -t sysfs sys "$ROOTDIR_ABS/sys"
 # --- 系统配置 ---
 chroot "$ROOTDIR_ABS" /bin/bash -c "echo 'LANG=en_US.UTF-8' > /etc/locale.conf"
 chroot "$ROOTDIR_ABS" /bin/bash -c "echo 'fedora44' > /etc/hostname"
-chroot "$ROOTDIR_ABS" /bin/bash -c "echo -e '1234\n1234' | passwd root"
+# 设置 root 密码（允许少于8字符，因此不使用 --stdin）
+chroot "$ROOTDIR_ABS" bash -c "echo -e '1234\n1234' | passwd root"
 chroot "$ROOTDIR_ABS" systemctl enable NetworkManager sshd
 
 # --- 创建普通用户 ---
@@ -88,8 +89,8 @@ chroot "$ROOTDIR_ABS" useradd -m -s /bin/bash luser
 chroot "$ROOTDIR_ABS" bash -c "echo 'luser:luser' | chpasswd"
 chroot "$ROOTDIR_ABS" usermod -aG wheel luser
 
-# --- 安装 GNOME 桌面（可选，可注释）---
-chroot "$ROOTDIR_ABS" dnf groupinstall -y "GNOME Desktop" "GNOME Applications" "Standard"
+# --- 安装 GNOME 桌面（兼容 dnf5 语法）---
+chroot "$ROOTDIR_ABS" dnf group install -y "GNOME Desktop" "GNOME Applications" "Standard"
 chroot "$ROOTDIR_ABS" systemctl set-default graphical.target
 chroot "$ROOTDIR_ABS" systemctl enable gdm
 
