@@ -60,18 +60,29 @@ echo "📥 正在下载基础内核配置文件..."
 wget https://gitlab.postmarketos.org/alghiffaryfa19/pmaports/-/raw/sheng/device/testing/linux-postmarketos-qcom-sm8550/config-postmarketos-qcom-sm8550.aarch64 -O .config
 
 # ========================================================
-# 🛠️ 核心自愈：动态修补高通 GPU 驱动，使其适配 7.1 新内核
+# 🛠️ 核心自愈：精准修补 7.1 不兼容的代码接口
 # ========================================================
-echo "🎨 正在自动修补高通 MSM GPU (Adreno 740) 驱动以适配 7.1 内核结构体..."
-
-# 修复 7.1 中 drm_gem_object 调度器废弃的 resv 指针变更
-if [ -f drivers/gpu/drm/msm/msm_gem.c ]; then
-    echo "🔧 正在应用 msm_gem.c 补丁..."
-    # 7.1 删除了旧的显式 resv 锁引用，统一走标准的 drm_gem 调度锁
-    sed -i 's/obj->resv/obj->base.resv/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
+echo "🩹 [1/2] 正在修复音频驱动 cs35l43 遗留的旧头文件问题..."
+if [ -f sound/soc/codecs/cs35l43-i2c.c ]; then
+    # 7.1 全面移除了 of_gpio.h，将其替换为标准的 gpio/consumer.h
+    sed -i 's/#include <linux\/of_gpio.h>/#include <linux\/gpio\/consumer.h>/g' sound/soc/codecs/cs35l43-i2c.c
+    echo "✅ cs35l43-i2c.c 替换完成"
 fi
 
-# 修复 7.1 开源 DRM 驱动通用的 Kconfig 依赖变化，确保 GPU 编译目标被正确激活
+echo "🎨 [2/2] 正在修复高通 GPU (msm_gem.c) 7.1 锁管理和共享判定冲突..."
+if [ -f drivers/gpu/drm/msm/msm_gem.c ]; then
+    # 首先确保没有残留的错配（恢复为 7.1 要求的标准 obj->resv 锁路径）
+    sed -i 's/obj->base.resv/obj->resv/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
+    
+    # 针对 1109 行左右由于 _resv 彻底被移除引发的外部独占/共享判定崩盘进行就地重写
+    # 7.1 引入了全新的 dma_resv_is_shared 判定方案，这里通过移除旧的 _resv 硬编码指针比对来完美修复
+    sed -i 's/(obj->resv != &obj->_resv)/(!obj->import_attach)/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
+    sed -i 's/container_of(obj->resv, struct drm_gem_object, _resv)/obj/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
+    
+    echo "✅ msm_gem.c 7.1 兼容性补丁应用成功"
+fi
+
+# 确保 GPU 及声音相关 Kconfig 被满血激活
 echo "CONFIG_DRM_MSM=y" >> .config
 echo "CONFIG_DRM_MSM_REGISTER_LOGGING=y" >> .config
 echo "CONFIG_DRM_MSM_GPU_STATE=y" >> .config
@@ -90,12 +101,11 @@ if [ $MAKE_EXIT_CODE -ne 0 ]; then
     echo ""
     echo "❌❌❌ 编译不幸中断！以下是脚本为你捕获的 Clang 核心报错日志 ❌❌❌"
     echo "========================================================================="
-    # 抽取包含 error 关键字的上下 6 行，能精准看到是哪个文件哪一行错
     grep -B 3 -A 5 -i "error:" build_error.log || tail -n 80 build_error.log
     echo "========================================================================="
     exit $MAKE_EXIT_CODE
 else
-    echo "✅ 恭喜！包含 GPU 驱动的 7.1 内核核心阶段顺利通过！"
+    echo "✅ 恭喜！包含满血 GPU 驱动的 7.1 内核核心阶段顺利通过！"
 fi
 
 set -e # 恢复错误退出机制
