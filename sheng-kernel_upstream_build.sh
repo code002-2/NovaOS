@@ -62,23 +62,16 @@ wget https://gitlab.postmarketos.org/alghiffaryfa19/pmaports/-/raw/sheng/device/
 # ========================================================
 # 🛠️ 核心自愈：精准修补 7.1 不兼容的代码接口
 # ========================================================
-echo "🩹 [1/2] 正在修复音频驱动 cs35l43 遗留的旧头文件问题..."
-if [ -f sound/soc/codecs/cs35l43-i2c.c ]; then
-    # 7.1 全面移除了 of_gpio.h，将其替换为标准的 gpio/consumer.h
-    sed -i 's/#include <linux\/of_gpio.h>/#include <linux\/gpio\/consumer.h>/g' sound/soc/codecs/cs35l43-i2c.c
-    echo "✅ cs35l43-i2c.c 替换完成"
-fi
+echo "🩹 [1/2] 正在全量扫荡并修复所有驱动中残留的旧版 of_gpio.h 引用..."
+# 使用 find 找出 drivers 和 sound 目录下包含 of_gpio.h 的所有源文件，直接一键替换
+find drivers/ sound/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/#include <linux\/of_gpio.h>/#include <linux\/gpio\/consumer.h>/g' {} + 2>/dev/null || true
+echo "✅ 全量 GPIO 头文件清理完成"
 
 echo "🎨 [2/2] 正在修复高通 GPU (msm_gem.c) 7.1 锁管理和共享判定冲突..."
 if [ -f drivers/gpu/drm/msm/msm_gem.c ]; then
-    # 首先确保没有残留的错配（恢复为 7.1 要求的标准 obj->resv 锁路径）
     sed -i 's/obj->base.resv/obj->resv/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
-    
-    # 针对 1109 行左右由于 _resv 彻底被移除引发的外部独占/共享判定崩盘进行就地重写
-    # 7.1 引入了全新的 dma_resv_is_shared 判定方案，这里通过移除旧的 _resv 硬编码指针比对来完美修复
     sed -i 's/(obj->resv != &obj->_resv)/(!obj->import_attach)/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
     sed -i 's/container_of(obj->resv, struct drm_gem_object, _resv)/obj/g' drivers/gpu/drm/msm/msm_gem.c 2>/dev/null || true
-    
     echo "✅ msm_gem.c 7.1 兼容性补丁应用成功"
 fi
 
