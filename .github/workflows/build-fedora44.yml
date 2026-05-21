@@ -1,4 +1,4 @@
-name: 🐧 构建Fedora 41 RootFS
+name: 🐧 Build Fedora 44 RootFS (with firmware from kernel-bundle)
 
 on:
   workflow_dispatch:
@@ -22,15 +22,15 @@ jobs:
     steps:
       - name: Generate release tag
         id: tag
-        run: echo "release_tag=fedora41-$(date -u '+%Y%m%d')-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+        run: echo "release_tag=fedora44-$(date -u '+%Y%m%d')-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
       - name: Create GitHub Release
         if: ${{ !github.event.inputs.skip_release }}
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
-          name: "Fedora 41 RootFS - ${{ steps.tag.outputs.release_tag }}"
+          name: "Fedora 44 RootFS - ${{ steps.tag.outputs.release_tag }}"
           body: |
-            🐧 Fedora 41 (ARM64) RootFS
+            🐧 Fedora 44 (ARM64) RootFS
             - **内核版本**: ${{ github.event.inputs.kernel_version }}
             - **桌面**: GNOME (GDM)
             - **用户**: luser / 密码: luser ; root / 密码: 1234
@@ -57,13 +57,13 @@ jobs:
       - name: Build RootFS (with firmware injection)
         id: build
         run: |
-          chmod +x build-fedora41-rootfs.sh
-          sudo ./build-fedora41-rootfs.sh ${{ github.event.inputs.kernel_version }}
-          echo "filename=$(ls fedora41_*.7z)" >> $GITHUB_OUTPUT
+          chmod +x build-fedora44-rootfs.sh
+          sudo ./build-fedora44-rootfs.sh ${{ github.event.inputs.kernel_version }}
+          echo "filename=$(ls fedora44_*.7z)" >> $GITHUB_OUTPUT
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fedora41-rootfs
+          name: fedora44-rootfs
           path: ${{ steps.build.outputs.filename }}
           retention-days: 7
       - name: Upload to Release
