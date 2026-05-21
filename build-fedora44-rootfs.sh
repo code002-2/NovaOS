@@ -4,8 +4,11 @@ set -e
 IMAGE_SIZE="8G"
 FILESYSTEM_UUID="ee8d3593-59b1-480e-a3b6-4fefb17ee7d8"
 FEDORA_VERSION="44"
-# 使用官方 CDN 源（同步最快）
-FEDORA_MIRROR="https://download.fedoraproject.org/pub/fedora/linux"
+
+# 使用清华源（baseurl 直连，避免 metalink 解析失败）
+FEDORA_BASEURL="https://mirrors.tuna.tsinghua.edu.cn/fedora/linux"
+# 备选：如果清华源不稳定，可切换至官方 CDN（但需要确保网络可达）
+# FEDORA_BASEURL="https://download.fedoraproject.org/pub/fedora/linux"
 
 usage() { echo "用法: $0 <kernel_version>"; exit 1; }
 [ $# -ne 1 ] && usage
@@ -16,7 +19,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 ROOTFS_IMG="fedora44_${TIMESTAMP}.img"
 
 echo "=========================================="
-echo "开始构建 Fedora $FEDORA_VERSION (ARM64) RootFS (官方源)"
+echo "开始构建 Fedora $FEDORA_VERSION (ARM64) RootFS"
 echo "将从 kernel-bundle-$KERNEL 中提取固件并注入"
 echo "=========================================="
 
@@ -51,14 +54,14 @@ mkdir rootdir
 mount -o loop "$ROOTFS_IMG" rootdir
 ROOTDIR_ABS=$(realpath rootdir)
 
-# --- 使用 dnf 安装基础系统（官方源）---
+# --- 使用 dnf 安装基础系统（直接指定 baseurl，绕过 metalink 解析）---
 dnf --installroot="$ROOTDIR_ABS" \
     --releasever=$FEDORA_VERSION \
     --forcearch=aarch64 \
     --nogpgcheck \
     --setopt=reposdir=/dev/null \
-    --repofrompath=fedora,$FEDORA_MIRROR/releases/$FEDORA_VERSION/Everything/aarch64/os \
-    --repofrompath=fedora-updates,$FEDORA_MIRROR/updates/$FEDORA_VERSION/Everything/aarch64/os \
+    --repofrompath=fedora,${FEDORA_BASEURL}/releases/$FEDORA_VERSION/Everything/aarch64/os \
+    --repofrompath=fedora-updates,${FEDORA_BASEURL}/updates/$FEDORA_VERSION/Everything/aarch64/os \
     install -y \
     systemd sudo dnf kernel-core \
     NetworkManager openssh-server \
@@ -80,7 +83,6 @@ mount -t sysfs sys "$ROOTDIR_ABS/sys"
 # --- 系统配置 ---
 chroot "$ROOTDIR_ABS" /bin/bash -c "echo 'LANG=en_US.UTF-8' > /etc/locale.conf"
 chroot "$ROOTDIR_ABS" /bin/bash -c "echo 'fedora44' > /etc/hostname"
-# 设置 root 密码（允许少于8字符，因此不使用 --stdin）
 chroot "$ROOTDIR_ABS" bash -c "echo -e '1234\n1234' | passwd root"
 chroot "$ROOTDIR_ABS" systemctl enable NetworkManager sshd
 
@@ -89,7 +91,7 @@ chroot "$ROOTDIR_ABS" useradd -m -s /bin/bash luser
 chroot "$ROOTDIR_ABS" bash -c "echo 'luser:luser' | chpasswd"
 chroot "$ROOTDIR_ABS" usermod -aG wheel luser
 
-# --- 安装 GNOME 桌面（兼容 dnf5 语法）---
+# --- 安装 GNOME 桌面（使用 dnf group install 兼容 dnf5）---
 chroot "$ROOTDIR_ABS" dnf group install -y "GNOME Desktop" "GNOME Applications" "Standard"
 chroot "$ROOTDIR_ABS" systemctl set-default graphical.target
 chroot "$ROOTDIR_ABS" systemctl enable gdm
