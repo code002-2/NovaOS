@@ -1,8 +1,11 @@
 #!/bin/bash
 set -e
 
-# 🛡️ 异常守护：确保挂载点自动清理
+# ========================================================
+# 🛡️ 异常守护：确保脚本退出或中断时，一定会卸载挂载点
+# ========================================================
 cleanup() {
+    echo "🧹 执行挂载点安全清理..."
     umount -l rootdir/dev/pts 2>/dev/null || true
     umount -l rootdir/dev 2>/dev/null || true
     umount -l rootdir/proc 2>/dev/null || true
@@ -11,65 +14,154 @@ cleanup() {
 }
 trap cleanup EXIT ERR
 
-IMAGE_SIZE="8G"
+IMAGE_SIZE="12G" # 调整了镜像大小以适应 ubuntu-desktop
+FILESYSTEM_UUID="ee8d3593-59b1-480e-a3b6-4fefb17ee7d8"
+
 UBUNTU_SUITE="resolute"
 BUILD_MIRROR="http://archive.ubuntu.com/ubuntu"
 TARGET_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu"
 
-if [ $# -ne 2 ]; then
+usage() {
     echo "用法: $0 <kernel_version> <desktop_environment>"
+    echo "desktop_environment: gnome, kde 或 xfce"
+    exit 1
+}
+
+if [ $# -ne 2 ]; then
+    usage
+fi
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "请使用root权限运行"
     exit 1
 fi
 
 KERNEL=$1
 DESKTOP_ENV=$2
 
-# 初始化镜像
-truncate -s $IMAGE_SIZE "ubuntu26.img"
-mkfs.ext4 "ubuntu26.img"
-mkdir -p rootdir
-mount -o loop "ubuntu26.img" rootdir
+if [[ ! "$DESKTOP_ENV" =~ ^(gnome|kde|xfce)$ ]]; then
+    echo "错误: desktop_environment 必须是 gnome, kde 或 xfce"
+    exit 1
+fi
 
-# 基础引导
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+ROOTFS_IMG="ubuntu26_${DESKTOP_ENV}_${TIMESTAMP}.img"
+
+echo "=========================================="
+echo "⚡ 开始极速构建 Ubuntu 26.04 LTS (Resolute) RootFS"
+echo "桌面环境: $DESKTOP_ENV"
+echo "内核版本: $KERNEL"
+echo "=========================================="
+
+truncate -s $IMAGE_SIZE "$ROOTFS_IMG"
+mkfs.ext4 "$ROOTFS_IMG"
+mkdir -p rootdir
+mount -o loop "$ROOTFS_IMG" rootdir
+
 debootstrap --arch=arm64 "$UBUNTU_SUITE" rootdir "$BUILD_MIRROR"
 
-# 挂载必要的虚拟文件系统
 mount --bind /dev rootdir/dev
 mount --bind /dev/pts rootdir/dev/pts
 mount -t proc proc rootdir/proc
 mount -t sysfs sys rootdir/sys
 
-# 配置 APT 源
 printf "deb %s %s main restricted universe multiverse\n" "$BUILD_MIRROR" "$UBUNTU_SUITE" > rootdir/etc/apt/sources.list
+printf "deb %s %s-updates main restricted universe multiverse\n" "$BUILD_MIRROR" "$UBUNTU_SUITE" >> rootdir/etc/apt/sources.list
+printf "deb %s %s-backports main restricted universe multiverse\n" "$BUILD_MIRROR" "$UBUNTU_SUITE" >> rootdir/etc/apt/sources.list
+printf "deb %s %s-security main restricted universe multiverse\n" "$BUILD_MIRROR" "$UBUNTU_SUITE" >> rootdir/etc/apt/sources.list
 
 export DEBIAN_FRONTEND=noninteractive
 
-# 安装加速工具
 chroot rootdir apt-get update
-chroot rootdir apt-get install -y eatmydata
+chroot rootdir apt-get install -y --no-install-recommends eatmydata
 
-# 安装核心组件 (包含平板触控优化)
-chroot rootdir eatmydata apt-get install -y --no-install-recommends \
-    systemd sudo vim network-manager openssh-server \
-    gnome-tweaks gnome-shell-extension-manager \
-    xdg-desktop-portal-gnome maliit-keyboard \
-    parted e2fsprogs
-
-# 根据桌面环境安装
-if [ "$DESKTOP_ENV" = "gnome" ]; then
-    chroot rootdir eatmydata apt-get install -y --no-install-recommends ubuntu-desktop-minimal gdm3
+if ls *.deb 1> /dev/null 2>&1; then
+    cp *.deb rootdir/tmp/
+    chroot rootdir eatmydata apt-get install -y /tmp/*.deb || true
 fi
 
-# 注入触控校准
+chroot rootdir eatmydata apt-get install -y --no-install-recommends \
+    systemd sudo vim-tiny wget curl \
+    network-manager openssh-server \
+    wpasupplicant dbus parted e2fsprogs
+
+chroot rootdir bash -c "echo 'LANG=en_US.UTF-8' > /etc/default/locale"
+chroot rootdir locale-gen en_US.UTF-8
+
+chroot rootdir bash -c "echo -e '1234\n1234' | passwd root"
+echo "ubuntu26-${DESKTOP_ENV}" > rootdir/etc/hostname
+
+# ========================================================
+# 📦 桌面环境分支流转
+# ========================================================
+if [ "$DESKTOP_ENV" = "gnome" ]; then
+    # 已替换为完整的 ubuntu-desktop
+    chroot rootdir eatmydata apt-get install -y --no-install-recommends ubuntu-desktop gnome-terminal firefox gdm3
+    DM="gdm3"
+elif [ "$DESKTOP_ENV" = "kde" ]; then
+    chroot rootdir eatmydata apt-get install -y --no-install-recommends plasma-desktop sddm konsole firefox plasma-workspace systemsettings discover packagekit
+    DM="sddm"
+elif [ "$DESKTOP_ENV" = "xfce" ]; then
+    chroot rootdir eatmydata apt-get install -y --no-install-recommends xfce4 xfce4-terminal lightdm lightdm-gtk-greeter firefox mousepad thunar
+    DM="lightdm"
+fi
+
+chroot rootdir useradd -m -s /bin/bash luser
+echo "luser:luser" | chroot rootdir chpasswd
+chroot rootdir usermod -aG sudo,audio,video,render,input,plugdev luser
+
+chroot rootdir bash -c "echo 'ttyMSM0' >> /etc/securetty"
+ln -sf /lib/systemd/system/getty@.service rootdir/etc/systemd/system/getty.target.wants/getty@ttyMSM0.service
+chroot rootdir systemctl enable systemd-resolved
+ln -sf /run/systemd/resolve/stub-resolv.conf rootdir/etc/resolv.conf
+
 mkdir -p rootdir/etc/udev/rules.d/
-echo 'ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0 0 0 1"' > rootdir/etc/udev/rules.d/99-touchscreen-sheng.rules
+printf 'ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0 0 0 1"\n' > rootdir/etc/udev/rules.d/99-touchscreen-sheng.rules
 
-# 自动扩容与最终源替换
-printf "PARTLABEL=linux / ext4 defaults,noatime,errors=remount-ro,x-systemd.growfs 0 1\n" > rootdir/etc/fstab
+if [ "$DM" = "gdm3" ]; then
+    mkdir -p rootdir/etc/gdm3
+    printf "[daemon]\nAutomaticLoginEnable=true\nAutomaticLogin=luser\n" > rootdir/etc/gdm3/daemon.conf
+    chroot rootdir systemctl enable gdm3
+fi
+
+if [ "$DM" = "sddm" ]; then
+    mkdir -p rootdir/etc/sddm.conf.d
+    printf "[General]\nDisplayServer=x11\nInputMethod=\n" > rootdir/etc/sddm.conf.d/ubuntu-defaults.conf
+    printf "[Autologin]\nUser=luser\nSession=plasma\n" > rootdir/etc/sddm.conf.d/autologin.conf
+    if chroot rootdir id -u sddm >/dev/null 2>&1; then
+        chroot rootdir usermod -aG video,render,input sddm || true
+    fi
+    mkdir -p rootdir/etc/xdg
+    printf "[PowerManagement]\nScreenBlanking=false\nDisplaySleep=0\n" > rootdir/etc/xdg/plasmarc
+    chroot rootdir systemctl enable sddm
+fi
+
+if [ "$DM" = "lightdm" ]; then
+    mkdir -p rootdir/etc/lightdm/lightdm.conf.d
+    printf "[Seat:*]\nautologin-user=luser\nautologin-user-timeout=0\n" > rootdir/etc/lightdm/lightdm.conf.d/autologin.conf
+    chroot rootdir systemctl enable lightdm
+fi
+
+chroot rootdir systemctl set-default graphical.target
+
 printf "deb %s %s main restricted universe multiverse\n" "$TARGET_MIRROR" "$UBUNTU_SUITE" > rootdir/etc/apt/sources.list
+printf "deb %s %s-updates main restricted universe multiverse\n" "$TARGET_MIRROR" "$UBUNTU_SUITE" >> rootdir/etc/apt/sources.list
+printf "deb %s %s-backports main restricted universe multiverse\n" "$TARGET_MIRROR" "$UBUNTU_SUITE" >> rootdir/etc/apt/sources.list
+printf "deb %s %s-security main restricted universe multiverse\n" "$TARGET_MIRROR" "$UBUNTU_SUITE" >> rootdir/etc/apt/sources.list
 
-# 清理与打包
+printf "PARTLABEL=linux / ext4 defaults,noatime,errors=remount-ro,x-systemd.growfs 0 1\n" > rootdir/etc/fstab
+
+chroot rootdir apt-get purge -y eatmydata
+chroot rootdir apt-get autoremove -y
 chroot rootdir apt-get clean
+chroot rootdir rm -rf /tmp/*.deb
+
 cleanup
-7z a -t7z -m0=lzma2 -mx=5 -mmt=on "ubuntu26_${DESKTOP_ENV}.7z" "ubuntu26.img"
-echo "✅ 构建完成！"
+
+tune2fs -U $FILESYSTEM_UUID "$ROOTFS_IMG"
+
+echo "✅ 镜像生成完成: $ROOTFS_IMG"
+7z a -t7z -m0=lzma2 -mx=5 -mmt=on "ubuntu26_${DESKTOP_ENV}_${TIMESTAMP}.7z" "$ROOTFS_IMG"
+rm -f "$ROOTFS_IMG"
+
+echo "🎉 Ubuntu 26.04 构建与压缩全部完成！"
