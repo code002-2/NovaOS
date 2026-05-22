@@ -1,5 +1,5 @@
 #!/bin/bash
-set +e # 关闭遇到错误立退，由脚本精细捕获
+set +e # 关闭遇到错误立即退出，由脚本精细捕获
 
 WORKSPACE="${1:-$(pwd)}"
 
@@ -58,7 +58,7 @@ git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 
 if git merge "$UPSTREAM_TARGET" --no-edit; then
-    echo "✅ 完美！上游 7.1 主线最新补丁已无缝合并。"
+    echo "✅ 上游 7.1 主线最新补丁已无缝合并。"
 else
     echo "❌ 警告：自动合并冲突，启动防御机制..."
     git merge --abort
@@ -66,9 +66,10 @@ else
     echo "⚠️ 已通过 Ours 策略强制完成 7.1 补丁合并。"
 fi
 
-echo "♻️ 正在强行还原稳定的高通小米设备树，覆盖 7.1 错乱节点..."
-cp -r "$WORKSPACE/dtb_backup"/* arch/arm64/boot/dts/qcom/ 2>/dev/null || true
-echo "✅ 设备树总线结构体强制回滚至安全状态"
+echo "♻️ 正在将安全的高通小米板级设备树同步至 7.1 总线架构中..."
+# 仅恢复特定的 sheng 差异板级文件，不盲目覆盖 7.1 已经大改的 sm8550.dtsi 核心总线，防止时钟死锁
+cp "$WORKSPACE/dtb_backup"/*sheng* arch/arm64/boot/dts/qcom/ 2>/dev/null || true
+echo "✅ 设备树差异板级文件强制对齐"
 # ========================================================
 
 echo "📥 正在下载基础内核配置文件..."
@@ -82,10 +83,11 @@ find drivers/ sound/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/#i
 
 echo "📱 [2/5] 正在强行重写触摸屏驱动 (nt36xxx.c)，完全抹除旧版 GPIO 函数..."
 if [ -f drivers/input/touchscreen/nt36532e/nt36xxx.c ]; then
-    sed -i 's/.*of_get_named_gpio.*novatek,irq.*/        ts->irq_gpio = desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,irq", 0, GPIOD_ASIS, "nt36xxx_irq"));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
-    sed -i 's/.*of_get_named_gpio.*novatek,reset.*/        ts->reset_gpio = desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,reset", 0, GPIOD_ASIS, "nt36xxx_reset"));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
-    sed -i 's/of_get_named_gpio(np, "novatek,irq-gpio", 0)/desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,irq", 0, GPIOD_ASIS, "nt36xxx_irq"))/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
-    sed -i 's/of_get_named_gpio(np, "novatek,reset-gpio", 0)/desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,reset", 0, GPIOD_ASIS, "nt36xxx_reset"))/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
+    # 修复：将非标的 GPIOD_ASIS 替换为主线合规的 GPIOD_IN
+    sed -i 's/.*of_get_named_gpio.*novatek,irq.*/        ts->irq_gpio = desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,irq", 0, GPIOD_IN, "nt36xxx_irq"));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
+    sed -i 's/.*of_get_named_gpio.*novatek,reset.*/        ts->reset_gpio = desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,reset", 0, GPIOD_IN, "nt36xxx_reset"));/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
+    sed -i 's/of_get_named_gpio(np, "novatek,irq-gpio", 0)/desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,irq", 0, GPIOD_IN, "nt36xxx_irq"))/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
+    sed -i 's/of_get_named_gpio(np, "novatek,reset-gpio", 0)/desc_to_gpio(fwnode_gpiod_get_index(of_fwnode_handle(np), "novatek,reset", 0, GPIOD_IN, "nt36xxx_reset"))/g' drivers/input/touchscreen/nt36532e/nt36xxx.c
 fi
 
 echo "🎨 [3/5] 正在修复高通 GPU (msm_gem.c) 7.1 锁管理和共享判定冲突..."
@@ -102,10 +104,15 @@ sed -i 's/CONFIG_SM_DISPCC_8550=m/CONFIG_SM_DISPCC_8550=y/g' .config
 sed -i 's/CONFIG_INTERCONNECT_QCOM_SM8550=m/CONFIG_INTERCONNECT_QCOM_SM8550=y/g' .config
 sed -i 's/CONFIG_QCOM_RPMHPD=m/CONFIG_QCOM_RPMHPD=y/g' .config
 
+# 🚨 绝杀修复：补齐高通核心主存储核心依赖组件为全内置，杜绝因为缺驱动引发掉 fastboot
 sed -i 's/CONFIG_SCSI_UFS_QCOM=m/CONFIG_SCSI_UFS_QCOM=y/g' .config
 sed -i 's/CONFIG_SCSI_UFSHCD_PLATFORM=m/CONFIG_SCSI_UFSHCD_PLATFORM=y/g' .config
 sed -i 's/CONFIG_SCSI_UFSHCD=m/CONFIG_SCSI_UFSHCD=y/g' .config
+echo "CONFIG_PHY_QCOM_UFS=y" >> .config
+echo "CONFIG_RESET_QCOM_AOSS=y" >> .config
+echo "CONFIG_QCOM_COMMAND_DB=y" >> .config
 
+# 开启本地 Framebuffer 终端控制台回显
 echo "CONFIG_VT=y" >> .config
 echo "CONFIG_VT_CONSOLE=y" >> .config
 echo "CONFIG_FRAMEBUFFER_CONSOLE=y" >> .config
@@ -114,10 +121,12 @@ echo "CONFIG_FONT_8x16=y" >> .config
 echo "CONFIG_LOGO=y" >> .config
 echo "CONFIG_LOGO_LINUX_CLUT224=y" >> .config
 
-# 锁死基本启动参数
-echo 'CONFIG_CMDLINE="console=ttyMSM0,115200 earlycon=msm_geni_serial,0xaec00000 root=PARTLABEL=linux rootwait fbcon=nodefer msm_drm.allow_fb_modifiers=1 loglevel=7 panic=0 pm_poweroff.reset_type=1"' >> .config
+# 🚨 绝杀修复：彻底修正强制启动参数。将 root 挂载目标由主线早期无法识别的 PARTLABEL 改为锁死硬 UUID 挂载
+sed -i '/CONFIG_CMDLINE=/d' .config
+echo 'CONFIG_CMDLINE="console=ttyMSM0,115200 earlycon=msm_geni_serial,0xaec00000 root=UUID=ee8d3593-59b1-480e-a3b6-4fefb17ee7d8 rootwait rw fbcon=nodefer msm_drm.allow_fb_modifiers=1 loglevel=7 panic=10"' >> .config
 echo "CONFIG_CMDLINE_FORCE=y" >> .config
 
+# 关闭 Debug 减小内核体积
 echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> .config
 sed -i 's/CONFIG_DEBUG_INFO=y/# CONFIG_DEBUG_INFO is not set/g' .config
 echo "CONFIG_DEBUG_INFO_NONE=y" >> .config
@@ -154,6 +163,11 @@ _kernel_version="$(make kernelrelease -s)"
 echo "📦 最终构建出的内核定制版本号为: ${_kernel_version}"
 
 # ========================================================
-# 📦 打包重构（强力重构：全部采用绝对路径，确保 Actions 100% 抓到包）
+# 📤 打包输出阶段 (保持原样输出)
 # ========================================================
-GAME_PKG_NAME="l
+mkdir -p "$WORKSPACE/output"
+cp arch/arm64/boot/Image "$WORKSPACE/output/"
+cp arch/arm64/boot/Image.gz "$WORKSPACE/output/"
+cp arch/arm64/boot/dts/qcom/*sheng*.dtb "$WORKSPACE/output/" 2>/dev/null || cp arch/arm64/boot/dts/qcom/*.dtb "$WORKSPACE/output/"
+
+echo "✅ 7.1 精准加固内核编译及提取顺利完成！"
