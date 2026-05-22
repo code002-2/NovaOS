@@ -12,11 +12,12 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: write # ⚡ 强制提权，防止 GitHub Actions 后台鉴权拦截导致的手动触发灰化
+
 jobs:
   prepare-release:
     runs-on: ubuntu-24.04-arm
-    permissions:
-      contents: write
     outputs:
       release_tag: ${{ steps.tag.outputs.release_tag }}
     steps:
@@ -90,7 +91,7 @@ jobs:
           chmod +x build-ubuntu26-rootfs.sh
           sudo ./build-ubuntu26-rootfs.sh ${{ github.event.inputs.kernel_version }} ${{ matrix.desktop_env }}
           
-          # 找出生成的 .7z 压缩包和未压缩的原始 .img 镜像文件
+          # 动态捕获刚刚生成的 7z 产物和未压缩的 img 原文件
           SEVEN_Z_FILE=$(ls ubuntu26_${{ matrix.desktop_env }}_*.7z | head -1)
           ORIGINAL_IMG=$(ls ubuntu26_${{ matrix.desktop_env }}_*.img | head -1)
           
@@ -101,7 +102,6 @@ jobs:
       - name: 🩹 🧠 自动化联动防御：深度拦截并加固 KDE 图形引导 (防止 sddm 卡死)
         if: matrix.desktop_env == 'kde'
         run: |
-          # 提取上一步识别出的原始 .img 文件
           KDE_IMG="${{ steps.build.outputs.img_path }}"
           
           if [ -f "$KDE_IMG" ]; then
@@ -137,12 +137,11 @@ ScreenBlanking=false
 DisplaySleep=0
 EOF
 
-            # 安全同步、解锁并卸载挂载点
             sudo sync
             sudo umount -l mnt_repair
             rm -rf mnt_repair
             
-            # 【重新打包】由于修改了镜像内部内容，需要删除脚本原本生成的旧 7z 包，并重新打包最新的加固镜像
+            # 【重新打包】删除原本未加固的 7z，重新打包最新的加固镜像
             echo "🗜️ 正在重新压缩加固后的完美版 KDE 镜像..."
             rm -f "${{ steps.build.outputs.path }}" || true
             7z a "${{ steps.build.outputs.path }}" "$KDE_IMG"
