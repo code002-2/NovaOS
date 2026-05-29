@@ -3,7 +3,6 @@ set -e
 
 IMAGE_SIZE="8G"
 FILESYSTEM_UUID="ee8d3593-59b1-480e-a3b6-4fefb17ee7d8"
-# 🚨 终极网络修复 1：改用 Arch Linux ARM 全球官方源，避免跨国连接国内清华源导致超时
 ALARM_MIRROR="http://mirror.archlinuxarm.org"
 
 usage() {
@@ -58,29 +57,30 @@ echo "Server = $ALARM_MIRROR/\$arch/\$repo" > rootdir/etc/pacman.d/mirrorlist
 chroot rootdir pacman-key --init
 chroot rootdir pacman-key --populate archlinuxarm
 
-# 🚨 终极网络修复 2：禁用 pacman 的下载超时机制，防止海外节点偶发的网络波动导致构建失败
+# 禁用 pacman 的下载超时机制
 sed -i 's/^#DisableDownloadTimeout/DisableDownloadTimeout/' rootdir/etc/pacman.conf
 
-echo "🧹 正在清理 Arch 自带的内核与固件，只为您提供的 Release 包保留空间..."
-# 使用 -Rdd 暴力卸载原生内核和固件，忽略依赖警告
+echo "🧹 正在清理 Arch 自带的内核与固件，为您提供的 Release 包保留空间..."
 chroot rootdir pacman -Rdd --noconfirm linux-aarch64 linux-firmware || true
 
 echo "📦 正在更新系统并安装基础组件..."
-# 显式加入 kmod 和 base，确保 depmod 和基本系统库完好无损
 chroot rootdir pacman -Syu --noconfirm base kmod glibc systemd sudo vim wget curl networkmanager wpa_supplicant dbus
 
-echo "🔨 正在扫描并注入本地内核与系统固件包..."
+# 🚨 关键修复：将 GNOME 的安装提前！让 pacman 先部署完整的官方环境，避免后续冲突
+echo "🖥️ 正在安装 GNOME 桌面环境及依赖..."
+chroot rootdir pacman -S --noconfirm gnome gdm
 
-# 使用 tar 的软链接保护机制完美合并 Debian 与 Arch 目录树
+echo "🔨 正在扫描并注入本地内核与系统固件包 (鸠占鹊巢：覆盖官方组件)..."
+
+# 使用 tar 的软链接保护机制完美合并 Debian 与 Arch 目录树，并覆盖原生包
 if ls *.deb 1> /dev/null 2>&1; then
     for pkg in *.deb; do
-        echo "   -> 正在安全提取 $pkg ..."
-        # 将 deb 转化为 tar 数据流，利用 --keep-directory-symlink 精准注入
+        echo "   -> 正在提取并覆盖注入 $pkg ..."
+        # tar 默认会强制覆盖已有文件，刚好满足我们用自定义驱动替换官方驱动的需求
         dpkg-deb --fsys-tarfile "$pkg" | tar -x --keep-directory-symlink -C rootdir/
     done
     
     echo "   正在更新内核模块依赖..."
-    # 为防环境变量失效，使用绝对路径调用 depmod
     KERNEL_MODULE_DIR=$(ls rootdir/usr/lib/modules/ | head -n 1)
     if [ -n "$KERNEL_MODULE_DIR" ]; then
         echo "   发现内核版本: $KERNEL_MODULE_DIR"
@@ -94,12 +94,11 @@ fi
 if ls *.tar.gz 1> /dev/null 2>&1; then
     for tarball in *.tar.gz; do
         echo "   -> 正在解压系统包 $tarball ..."
-        # 同样使用 --keep-directory-symlink 保护 Arch 原生系统软链接
         tar -xz --keep-directory-symlink -f "$tarball" -C rootdir/
     done
 fi
 
-# 确保固件目录存在并修正权限，避免 chmod 找不到目录报错
+# 确保固件目录存在并修正权限
 if [ -d "rootdir/usr/lib/firmware" ]; then
     chmod -R 755 rootdir/usr/lib/firmware/ || true
 fi
@@ -115,10 +114,6 @@ chroot rootdir bash -c "echo 'root:1234' | chpasswd"
 # 主机名完全调整为 arch-sheng
 echo "arch-sheng" > rootdir/etc/hostname
 
-# 安装 GNOME 桌面环境和 GDM
-echo "🖥️ 正在安装 GNOME 桌面环境..."
-chroot rootdir pacman -S --noconfirm gnome gdm
-
 # 创建普通用户并分配合规的硬件访问权限组
 chroot rootdir useradd -m -s /bin/bash luser
 chroot rootdir bash -c "echo 'luser:luser' | chpasswd"
@@ -131,7 +126,7 @@ chmod 440 rootdir/etc/sudoers.d/wheel
 echo "🩹 正在针对高通 SM8550 (Sheng) 注入底层自愈补丁..."
 ln -sf /usr/lib/systemd/system/getty@.service rootdir/etc/systemd/system/getty.target.wants/getty@ttyMSM0.service
 
-# 激活 DNS 托管解析与网络服务 
+# 激活 DNS 托管解析与网络服务
 chroot rootdir systemctl enable systemd-resolved
 chroot rootdir systemctl enable NetworkManager
 ln -sf /run/systemd/resolve/stub-resolv.conf rootdir/etc/resolv.conf
