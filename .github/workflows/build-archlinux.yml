@@ -71,7 +71,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Install build tools
-        run: sudo apt update && sudo apt install -y bsdtar p7zip-full curl wget
+        run: sudo apt update && sudo apt install -y libarchive-tools p7zip-full curl wget
 
       - name: Download kernel bundle
         run: |
