@@ -45,6 +45,9 @@ mount --bind /dev/pts rootdir/dev/pts
 mount -t proc proc rootdir/proc
 mount -t sysfs sys rootdir/sys
 
+# 🚨 将宿主机的 DNS 配置文件复制到 chroot 环境中，赋予其联网解析域名的能力
+cp /etc/resolv.conf rootdir/etc/resolv.conf
+
 # 配置清华大学 Arch Linux ARM 镜像源
 echo "Server = $ALARM_MIRROR/\$arch/\$repo" > rootdir/etc/pacman.d/mirrorlist
 
@@ -55,7 +58,7 @@ chroot rootdir pacman-key --populate archlinuxarm
 echo "📦 正在更新系统并安装基础组件..."
 chroot rootdir pacman -Syu --noconfirm systemd sudo vim wget curl networkmanager wpa_supplicant dbus
 
-# 修复点：强制解压 Debian 内核 .deb 包到 Arch rootfs 中
+# 强制解压 Debian 内核 .deb 包到 Arch rootfs 中并更新模块依赖
 if ls *.deb 1> /dev/null 2>&1; then
     echo "🔨 发现 Debian 内核包 (.deb)，正在将其强制提取到 Arch rootfs 中..."
     
@@ -65,7 +68,6 @@ if ls *.deb 1> /dev/null 2>&1; then
     done
     
     echo "   正在更新内核模块依赖..."
-    # 自动获取 /lib/modules 下的内核版本目录名并运行 depmod
     KERNEL_MODULE_DIR=$(ls rootdir/lib/modules/ | head -n 1)
     if [ -n "$KERNEL_MODULE_DIR" ]; then
         echo "   发现内核版本: $KERNEL_MODULE_DIR"
@@ -102,7 +104,7 @@ chmod 440 rootdir/etc/sudoers.d/wheel
 echo "🩹 正在针对高通 SM8550 (Sheng) 注入底层自愈补丁..."
 ln -sf /usr/lib/systemd/system/getty@.service rootdir/etc/systemd/system/getty.target.wants/getty@ttyMSM0.service
 
-# 激活 DNS 托管解析与网络服务
+# 激活 DNS 托管解析与网络服务 (这一步会覆盖我们之前复制的 resolv.conf，确保成品系统的网络交由 Arch 的 systemd-resolved 管理)
 chroot rootdir systemctl enable systemd-resolved
 chroot rootdir systemctl enable NetworkManager
 ln -sf /run/systemd/resolve/stub-resolv.conf rootdir/etc/resolv.conf
