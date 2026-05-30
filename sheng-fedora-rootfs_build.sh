@@ -51,7 +51,6 @@ echo "nameserver 8.8.8.8" > rootdir/etc/resolv.conf
 echo "nameserver 1.1.1.1" >> rootdir/etc/resolv.conf
 
 echo "📦 正在更新 Fedora 系统并安装基础组件..."
-# 精准排除 kernel, kernel-core, kernel-modules，但放过 kernel-headers 供 gcc 编译使用
 chroot rootdir dnf -y update --exclude=kernel --exclude=kernel-core --exclude=kernel-modules*
 chroot rootdir dnf -y install --exclude=kernel --exclude=kernel-core --exclude=kernel-modules* \
     systemd sudo vim wget curl tar xz pciutils findutils \
