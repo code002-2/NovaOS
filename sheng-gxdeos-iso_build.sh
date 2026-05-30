@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-IMAGE_SIZE="16G"
+IMAGE_SIZE="32G"
 FILESYSTEM_UUID="ee8d3593-59b1-480e-a3b6-4fefb17ee7d8"
 
 usage() {
