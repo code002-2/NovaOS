@@ -1,0 +1,129 @@
+name: 🌀 Build GXDE OS
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: '内核版本 (如 7.0)'
+        required: true
+        type: string
+        default: '7.0'
+      skip_release:
+        description: '跳过创建GitHub Release'
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+    steps:
+      - name: Generate release tag
+        id: tag
+        run: |
+          TAG="gxde-iso-$(date -u '+%Y%m%d')-${GITHUB_SHA::8}"
+          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: ${{ !github.event.inputs.skip_release }}
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          name: "GXDE OS ARM (Official ISO) - ${{ steps.tag.outputs.release_tag }}"
+          body: |
+            🌀 GXDE OS ARM For SM8550
+            
+            ---
+            
+            ### 📋 构建信息
+            | 项目 | 详情 |
+            |------|------|
+            | 架构 | ARM64 (aarch64) |
+            | 系统版本 | GXDE OS 25.4 |
+            | 构建方式 | **原生 ISO 解包提取 (Squashfs)** |
+            
+            ---
+            
+            ### 🔐 默认凭据
+            - 普通用户: `luser` / 密码: `luser`
+            - 管理员用户: `root` / 密码: `1234`
+            
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-gxdeos:
+    name: Extract & Build GXDE OS
+    runs-on: ubuntu-24.04-arm
+    needs: prepare-release
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install build and extraction tools
+        run: |
+          sudo apt update 
+          # 安装 squashfs-tools 用于解包 ISO 核心
+          sudo apt install -y libarchive-tools p7zip-full curl wget android-sdk-libsparse-utils squashfs-tools
+
+      - name: Download ISO and Kernel bundles
+        run: |
+          KERNEL_VER="${{ github.event.inputs.kernel_version }}"
+          if [ -z "$KERNEL_VER" ]; then KERNEL_VER="7.0"; fi
+          
+          echo "⬇️ 正在下载本地内核..."
+          gh release download "kernel-bundle-${KERNEL_VER}" \
+            --repo "${{ github.repository }}" --clobber || true
+            
+          echo "⬇️ 正在从镜像站智能下载 GXDE ISO 文件..."
+          # 使用 wget 递归查找并只下载该目录下的 1 个 ISO 文件
+          wget -r -l1 -nd -A ".iso" https://mirror.nyist.edu.cn/GXDE/ISO/25.4/arm64/
+          
+          # 验证下载是否成功
+          ls -lh *.iso
+          
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build RootFS
+        id: build
+        run: |
+          KERNEL_VER="${{ github.event.inputs.kernel_version }}"
+          if [ -z "$KERNEL_VER" ]; then KERNEL_VER="7.0"; fi
+          
+          chmod +x sheng-gxdeos-iso_build.sh
+          
+          # 获取刚刚下载的 ISO 文件名
+          DOWNLOADED_ISO=$(ls *.iso | head -n 1)
+          echo "即将使用 ISO: $DOWNLOADED_ISO 进行解包构建"
+          
+          # 运行构建脚本 (参数：内核版本 ISO文件名)
+          sudo ./sheng-gxdeos-iso_build.sh ${KERNEL_VER} "$DOWNLOADED_ISO"
+          
+          SEVEN_Z_FILE=$(ls gxdeos_iso_desktop_*.7z | head -1)
+          echo "filename=$(basename "$SEVEN_Z_FILE")" >> $GITHUB_OUTPUT
+          echo "path=$SEVEN_Z_FILE" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gxdeos-desktop
+          path: ${{ steps.build.outputs.path }}
+          retention-days: 7
+
+      - name: Upload to Release
+        if: ${{ !github.event.inputs.skip_release }}
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.release_tag }}
+          files: ${{ steps.build.outputs.path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
