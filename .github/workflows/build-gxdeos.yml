@@ -71,8 +71,21 @@ jobs:
       - name: Install build and extraction tools
         run: |
           sudo apt update 
-          # 安装 squashfs-tools 用于解包 ISO 核心
           sudo apt install -y libarchive-tools p7zip-full curl wget android-sdk-libsparse-utils squashfs-tools
+
+      # 👇 ================= 新增的大扫除步骤 ================= 👇
+      - name: Free up disk space (Maximize Build Space)
+        run: |
+          echo "🧹 正在清理 GitHub 服务器预装的无用臃肿环境..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/.ghcup
+          sudo apt-get clean
+          echo "📊 清理完毕，当前可用磁盘空间："
+          df -h /
+      # 👆 ================================================== 👆
 
       - name: Download ISO and Kernel bundles
         run: |
