@@ -60,8 +60,8 @@ chroot rootdir dnf -y install --exclude=kernel* \
     qrtr
 
 echo "🖥️ 正在安装 GNOME 桌面环境..."
-# 适配 Fedora 41+ 的 DNF5 新语法：将 groupinstall 分开写为 group install
-chroot rootdir dnf -y group install "GNOME"
+# 在 dnf5 中，使用 @gnome-desktop 可以直接绕过名称检查，精准命中底层组 ID
+chroot rootdir dnf -y install @gnome-desktop
 chroot rootdir dnf -y install gdm
 
 echo "🔨 正在扫描并注入本地内核与系统固件包..."
