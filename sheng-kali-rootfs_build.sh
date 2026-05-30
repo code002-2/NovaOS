@@ -99,8 +99,9 @@ chroot rootdir usermod -aG sudo,audio,video,input,netdev luser
 echo "%sudo ALL=(ALL:ALL) NOPASSWD: ALL" > rootdir/etc/sudoers.d/sudo-nopasswd
 chmod 440 rootdir/etc/sudoers.d/sudo-nopasswd
 
+echo "🩹 注入底层自愈补丁..."
 ln -sf /lib/systemd/system/getty@.service rootdir/etc/systemd/system/getty.target.wants/getty@ttyMSM0.service
-chroot rootdir systemctl enable systemd-resolved
+# ⚠️ 注意：这里已经彻底移除了会导致报错的 systemd-resolved 激活指令
 chroot rootdir systemctl enable NetworkManager
 
 mkdir -p rootdir/etc/udev/rules.d/
