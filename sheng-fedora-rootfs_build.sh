@@ -3,7 +3,6 @@ set -e
 
 IMAGE_SIZE="8G"
 FILESYSTEM_UUID="ee8d3593-59b1-480e-a3b6-4fefb17ee7d8"
-# 🎯 [核心修改] 这里直接指定拉取 Fedora 44 的底包
 FEDORA_VERSION="44" 
 
 usage() {
@@ -52,15 +51,16 @@ echo "nameserver 8.8.8.8" > rootdir/etc/resolv.conf
 echo "nameserver 1.1.1.1" >> rootdir/etc/resolv.conf
 
 echo "📦 正在更新 Fedora 系统并安装基础组件..."
-# 添加 --exclude=kernel* 屏蔽官方内核，直接消灭 dracut 报错，并加快打包速度！
 chroot rootdir dnf -y update --exclude=kernel*
 chroot rootdir dnf -y install --exclude=kernel* \
     systemd sudo vim wget curl tar xz pciutils findutils \
     NetworkManager wpa_supplicant dialog \
-    qrtr
+    git gcc make kernel-headers
+
+echo "🔨 正在从高通官方源码现场编译 qrtr 服务..."
+chroot rootdir bash -c "cd /tmp && git clone https://github.com/linux-msm/qrtr.git && cd qrtr && make prefix=/usr install && rm -rf /tmp/qrtr"
 
 echo "🖥️ 正在安装 GNOME 桌面环境..."
-# 在 dnf5 中，使用 @gnome-desktop 可以直接绕过名称检查，精准命中底层组 ID
 chroot rootdir dnf -y install @gnome-desktop
 chroot rootdir dnf -y install gdm
 
@@ -94,7 +94,7 @@ chroot rootdir usermod -aG wheel,audio,video,input luser
 echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" > rootdir/etc/sudoers.d/wheel
 chmod 440 rootdir/etc/sudoers.d/wheel
 
-echo "🩹 注入高通底层自愈补丁..."
+echo "🩹 注入 Fedora 底层自愈补丁..."
 ln -sf /usr/lib/systemd/system/getty@.service rootdir/etc/systemd/system/getty.target.wants/getty@ttyMSM0.service
 
 chroot rootdir systemctl enable systemd-resolved
@@ -103,10 +103,24 @@ chroot rootdir systemctl enable NetworkManager
 mkdir -p rootdir/etc/udev/rules.d/
 printf 'ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0 0 0 1"\n' > rootdir/etc/udev/rules.d/99-touchscreen-sheng.rules
 
+
+# ==========================================
+# 🚨 Fedora 桌面防崩溃与登录修复
+# ==========================================
+echo "🩹 正在处理 SELinux 权限与 GDM 登录配置..."
+
+# 1. 彻底禁用 SELinux (防止 Tarball 解压导致的权限标签缺失，解决登录无限循环)
+mkdir -p rootdir/etc/selinux
+echo "SELINUX=disabled" > rootdir/etc/selinux/config
+echo "SELINUXTYPE=targeted" >> rootdir/etc/selinux/config
+
+# 2. GDM 自动登录配置 (保留原生 Wayland 以获取最佳平板触控体验)
 mkdir -p rootdir/etc/gdm
 printf "[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=luser\n" > rootdir/etc/gdm/custom.conf
 chroot rootdir systemctl enable gdm
 chroot rootdir systemctl set-default graphical.target
+# ==========================================
+
 
 # ==========================================
 # ✨ 高通 WiFi 专属一键自动修复魔法
@@ -131,7 +145,21 @@ if [ -d "$MOD_DIR" ]; then
     done
 fi
 
-chroot rootdir systemctl enable qrtr-ns || true
+echo "⚙️ 正在创建 qrtr 守护进程开机自启服务..."
+cat << 'EOF' > rootdir/etc/systemd/system/qrtr-force.service
+[Unit]
+Description=Qualcomm IPC Router Service (QRTR)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/qrtr-ns -f
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+chroot rootdir systemctl enable qrtr-force.service
 # ==========================================
 
 printf "PARTLABEL=linux / ext4 defaults,noatime,errors=remount-ro 0 1\n" > rootdir/etc/fstab
