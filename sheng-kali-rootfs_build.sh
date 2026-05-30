@@ -23,7 +23,6 @@ DISTRO=$1
 KERNEL=$2
 DESKTOP=$3
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-# 镜像名字动态附带桌面环境名称
 ROOTFS_IMG="kali_${DESKTOP}_desktop_${TIMESTAMP}.img"
 
 echo "=========================================="
@@ -57,17 +56,18 @@ export DEBIAN_FRONTEND=noninteractive
 echo "📦 正在更新 Kali 系统并安装核心组件与 ${DESKTOP^^} 桌面..."
 chroot rootdir apt-get update
 
-# 🌟 核心分流逻辑：根据传入的桌面环境安装不同的包。直接使用官方 qrtr-tools，抛弃源码编译！
+# 🌟 核心分流：直接使用官方 qrtr-tools，抛弃源码编译！
+# 🚨 极客急救：在末尾强行加上了 init 包，防止极简底包阉割导致内核死机！
 if [ "$DESKTOP" == "gnome" ]; then
     chroot rootdir apt-get install -y --no-install-recommends \
         kali-linux-core kali-desktop-gnome gdm3 \
         systemd sudo vim wget curl tar xz-utils pciutils findutils \
-        network-manager wpasupplicant dialog kmod qrtr-tools ca-certificates
+        network-manager wpasupplicant dialog kmod qrtr-tools ca-certificates init
 elif [ "$DESKTOP" == "kde" ]; then
     chroot rootdir apt-get install -y --no-install-recommends \
         kali-linux-core kali-desktop-kde sddm \
         systemd sudo vim wget curl tar xz-utils pciutils findutils \
-        network-manager wpasupplicant dialog kmod qrtr-tools ca-certificates
+        network-manager wpasupplicant dialog kmod qrtr-tools ca-certificates init
 else
     echo "❌ 错误的桌面环境参数: $DESKTOP"
     exit 1
@@ -99,15 +99,25 @@ chroot rootdir usermod -aG sudo,audio,video,input,netdev luser
 echo "%sudo ALL=(ALL:ALL) NOPASSWD: ALL" > rootdir/etc/sudoers.d/sudo-nopasswd
 chmod 440 rootdir/etc/sudoers.d/sudo-nopasswd
 
+
+# ==========================================
+# 🚨 极其关键：欺骗 Android/高通内核，防止因权限瞬间死机重启
+# ==========================================
+echo "🩹 彻底禁用 SELinux (骗过高通内核，防止其拒绝执行 init)..."
+mkdir -p rootdir/etc/selinux
+echo "SELINUX=disabled" > rootdir/etc/selinux/config
+echo "SELINUXTYPE=targeted" >> rootdir/etc/selinux/config
+# ==========================================
+
+
 echo "🩹 注入底层自愈补丁..."
 ln -sf /lib/systemd/system/getty@.service rootdir/etc/systemd/system/getty.target.wants/getty@ttyMSM0.service
-# ⚠️ 注意：这里已经彻底移除了会导致报错的 systemd-resolved 激活指令
 chroot rootdir systemctl enable NetworkManager
 
 mkdir -p rootdir/etc/udev/rules.d/
 printf 'ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0 0 0 1"\n' > rootdir/etc/udev/rules.d/99-touchscreen-sheng.rules
 
-# 🌟 核心分流逻辑：根据桌面环境配置自动登录
+# 🌟 自动登录配置
 if [ "$DESKTOP" == "gnome" ]; then
     echo "🩹 配置 GDM3 (GNOME) 自动登录..."
     chroot rootdir systemctl enable gdm3
@@ -172,7 +182,6 @@ rm -rf rootdir
 tune2fs -U $FILESYSTEM_UUID "$ROOTFS_IMG"
 SPARSE_IMG="sparse_${ROOTFS_IMG}"
 img2simg "$ROOTFS_IMG" "$SPARSE_IMG"
-# 最终打包的名字也会带上桌面名称
 7z a "kali_${DESKTOP}_desktop_${TIMESTAMP}.7z" "$SPARSE_IMG"
 rm -f "$ROOTFS_IMG" "$SPARSE_IMG"
 
