@@ -23,7 +23,7 @@ DISTRO=$1
 KERNEL=$2
 DESKTOP=$3
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-# 镜像名字动态附带桌面环境名称，例如 kali_gnome_desktop_...
+# 镜像名字动态附带桌面环境名称
 ROOTFS_IMG="kali_${DESKTOP}_desktop_${TIMESTAMP}.img"
 
 echo "=========================================="
@@ -57,24 +57,21 @@ export DEBIAN_FRONTEND=noninteractive
 echo "📦 正在更新 Kali 系统并安装核心组件与 ${DESKTOP^^} 桌面..."
 chroot rootdir apt-get update
 
-# 🌟 核心分流逻辑：根据传入的桌面环境安装不同的包
+# 🌟 核心分流逻辑：根据传入的桌面环境安装不同的包。直接使用官方 qrtr-tools，抛弃源码编译！
 if [ "$DESKTOP" == "gnome" ]; then
     chroot rootdir apt-get install -y --no-install-recommends \
         kali-linux-core kali-desktop-gnome gdm3 \
         systemd sudo vim wget curl tar xz-utils pciutils findutils \
-        network-manager wpasupplicant dialog git gcc make libc6-dev kmod
+        network-manager wpasupplicant dialog kmod qrtr-tools ca-certificates
 elif [ "$DESKTOP" == "kde" ]; then
     chroot rootdir apt-get install -y --no-install-recommends \
         kali-linux-core kali-desktop-kde sddm \
         systemd sudo vim wget curl tar xz-utils pciutils findutils \
-        network-manager wpasupplicant dialog git gcc make libc6-dev kmod
+        network-manager wpasupplicant dialog kmod qrtr-tools ca-certificates
 else
     echo "❌ 错误的桌面环境参数: $DESKTOP"
     exit 1
 fi
-
-echo "🔨 正在从高通官方源码现场编译 qrtr 服务..."
-chroot rootdir bash -c "cd /tmp && git clone https://github.com/linux-msm/qrtr.git && cd qrtr && make prefix=/usr install && rm -rf /tmp/qrtr"
 
 echo "🔨 正在扫描并注入本地内核与系统固件包..."
 if ls *.deb 1> /dev/null 2>&1; then
