@@ -1,4 +1,4 @@
-name: 🌀 Build Deepin V23 Desktop
+name: 🌀 Build Deepin 25.1.0 Desktop
 
 on:
   workflow_dispatch:
@@ -28,7 +28,7 @@ jobs:
       - name: Generate release tag
         id: tag
         run: |
-          TAG="deepin-v23-$(date -u '+%Y%m%d')-${GITHUB_SHA::8}"
+          TAG="deepin25.1.0-$(date -u '+%Y%m%d')-${GITHUB_SHA::8}"
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
@@ -36,15 +36,31 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
-          name: "Deepin V23 Desktop - ${{ steps.tag.outputs.release_tag }}"
+          name: "Deepin 25.1.0 Desktop - ${{ steps.tag.outputs.release_tag }}"
           body: |
-            🌀 Pure Deepin V23 (Beige) OS For SM8550
+            🌀 Deepin 25.1.0 (Latest) OS For SM8550
+            
+            ---
+            
+            ### 📋 构建信息
+            | 项目 | 详情 |
+            |------|------|
+            | 架构 | ARM64 (arm64) |
+            | 内核版本 | ${{ github.event.inputs.kernel_version || '7.0' }} |
+            | 操作系统 | Deepin 25.1.0 (dde) |
+            
+            ---
+            
+            ### 🔐 默认凭据
+            - 普通用户: `luser` / 密码: `luser`
+            - 管理员用户: `root` / 密码: `1234`
+            
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-deepin:
-    name: Build Deepin V23 RootFS
+    name: Build Deepin 25.1.0 RootFS
     runs-on: ubuntu-24.04-arm
     needs: prepare-release
     steps:
@@ -67,18 +83,18 @@ jobs:
           KERNEL_VER="${{ github.event.inputs.kernel_version }}"
           if [ -z "$KERNEL_VER" ]; then KERNEL_VER="7.0"; fi
           
-          # ✨ 这里指向刚刚新建的专属 Deepin 脚本
           chmod +x deepin-rootfs_build.sh
           sudo ./deepin-rootfs_build.sh deepin ${KERNEL_VER}
           
-          SEVEN_Z_FILE=$(ls deepin_v23_desktop_*.7z | head -1)
+          # 捕捉打包生成的 7z 文件
+          SEVEN_Z_FILE=$(ls deepin25_1_0_desktop_*.7z | head -1)
           echo "filename=$(basename "$SEVEN_Z_FILE")" >> $GITHUB_OUTPUT
           echo "path=$SEVEN_Z_FILE" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: deepin-v23-desktop
+          name: deepin-25-1-0-desktop
           path: ${{ steps.build.outputs.path }}
           retention-days: 7
 
