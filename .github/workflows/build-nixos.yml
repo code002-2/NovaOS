@@ -1,4 +1,4 @@
-name: 🌀 Build NixOS Desktop (Sheng)
+name: 🌀 Build NixOS Desktop
 
 on:
   workflow_dispatch:
@@ -24,18 +24,19 @@ jobs:
         run: sudo apt update && sudo apt-get install -y android-sdk-libsparse-utils e2fsprogs p7zip-full
 
       - name: 🔄 Update Nix Flake Lock
-        run: nix flake update
+        # ✨ 告诉 Nix 去新建立的 nixos-sheng 文件夹里更新 lock 文件
+        run: nix flake update ./nixos-sheng
 
       - name: 🔨 Build NixOS Tarball
         id: build_nix
-        # ✨ 完美切回原生的系统级 tarball 编译输出路径
-        run: nix build .#nixosConfigurations.sheng.config.system.build.tarball
+        # ✨ 告诉 Nix 编译新建立的 nixos-sheng 文件夹里的系统配置
+        run: nix build ./nixos-sheng#nixosConfigurations.sheng.config.system.build.tarball
 
       - name: 🗜️ Pack to Ext4 Sparse Image
         run: |
           mkdir -p rootfs
           echo "⬇️ Extracting NixOS tarball..."
-          # 原生构建会输出到 result/tarball 目录
+          # 这一步不需要改，因为生成的 result 依然会在根目录
           tar -xvf result/tarball/*.tar.xz -C rootfs
           
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
