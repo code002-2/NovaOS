@@ -24,8 +24,7 @@ jobs:
         run: sudo apt update && sudo apt-get install -y android-sdk-libsparse-utils e2fsprogs p7zip-full
 
       - name: 🔄 Update Nix Flake Lock
-        # ✨ 告诉 Nix 去新建立的 nixos-sheng 文件夹里更新 lock 文件
-        run: nix flake update ./nixos-sheng
+        run: nix flake update --flake ./nixos-sheng
 
       - name: 🔨 Build NixOS Tarball
         id: build_nix
