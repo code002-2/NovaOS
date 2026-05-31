@@ -3,7 +3,7 @@ name: 🌀 Build NixOS Desktop
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
 
 permissions:
   contents: write
@@ -21,17 +21,23 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Install Tools (sparse & ext4 utils)
+        # ✨ 修复了之前的 apt 拼写错误
         run: sudo apt update && sudo apt-get install -y android-sdk-libsparse-utils e2fsprogs p7zip-full
+
+      - name: 🔄 Update Nix Flake Lock
+        # ✨ 强行查询并更新所有 Flake 依赖到最新滚动版本
+        run: nix flake update
 
       - name: 🔨 Build NixOS Tarball
         id: build_nix
-        # 这一步将输出一个包含整个操作系统的 tar.xz 文件
-        run: nix build .#nixosConfigurations.sheng.config.system.build.tarball
+        # ✨ 使用 generators 插件直接输出 tarball
+        run: nix build .#packages.aarch64-linux.sheng-tarball
 
       - name: 🗜️ Pack to Ext4 Sparse Image
         run: |
           mkdir -p rootfs
           echo "⬇️ Extracting NixOS tarball..."
+          # 从新路径解压生成的系统包
           tar -xvf result/tarball/*.tar.xz -C rootfs
           
           # 动态获取时间戳
