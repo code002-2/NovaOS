@@ -27,7 +27,7 @@ ROOTFS_IMG="deepin25_1_0_desktop_${TIMESTAMP}.img"
 
 echo "=========================================="
 echo "⏳ 开始构建最前沿版 Deepin 25.1.0 RootFS"
-echo "🌟 模式: 完整全家桶桌面 + 纯血中文环境 + 指定上游 Mesa 注入"
+echo "🌟 模式: 完整全家桶桌面 + Kernel官方上游固件级注入 + 外部Mesa"
 echo "内核版本: $KERNEL"
 echo "=========================================="
 
@@ -84,9 +84,21 @@ echo "deepin-sheng" > rootdir/etc/hostname
 echo "🖥️ 正在拉取 Deepin 完整桌面生态与中文字体..."
 chroot rootdir bash -c "apt install -y deepin-desktop-environment-core dde-session-shell dde-dock dde-launcher dde-desktop dde-control-center lightdm xwayland deepin-kwin-wayland xserver-xorg xinit fonts-noto-cjk fonts-wqy-microhei || apt install -y deepin-desktop-environment-core dde-session-shell lightdm xwayland deepin-kwin-wayland xserver-xorg xinit fonts-noto-cjk fonts-wqy-microhei"
 
-# 🎮 注入高通专有 GPU 固件与基础 Mesa 3D 运行时
-echo "🎮 正在注入骁龙 Adreno GPU 固件与基础 3D 图形栈..."
-chroot rootdir apt install -y firmware-qcom libgl1-mesa-dri libglx-mesa0 libegl-mesa0 mesa-vulkan-drivers mesa-utils
+# 🎮 仅拉取 3D 图形栈基础库（去掉了找不到的 firmware-qcom）
+echo "🎮 正在注入 3D 图形栈基础库..."
+chroot rootdir apt install -y libgl1-mesa-dri libglx-mesa0 libegl-mesa0 mesa-vulkan-drivers mesa-utils
+
+# 🚀 [核弹级修复] 直接从 Kernel.org 官方源码树拉取最新的骁龙闭源固件！
+echo "📥 正在从 Kernel.org 上游提取骁龙 8 Gen 2 (sm8550) 专属闭源固件..."
+mkdir -p rootdir/tmp/linux-fw
+# 使用 git sparse-checkout 极速拉取，只下载 qcom 目录，既快又稳！
+git clone --depth 1 --filter=blob:none --sparse https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git rootdir/tmp/linux-fw
+git -C rootdir/tmp/linux-fw sparse-checkout set qcom
+mkdir -p rootdir/lib/firmware/
+# 必须用 cp -a 保留里面的软链接
+cp -a rootdir/tmp/linux-fw/qcom rootdir/lib/firmware/
+rm -rf rootdir/tmp/linux-fw
+echo "✅ 骁龙核心固件注入完成！"
 
 # 🔗 注入用户指定的 Debian 官方最新 Mesa 包
 echo "📥 正在拉取并注入指定的外部 Mesa 包..."
@@ -172,4 +184,4 @@ echo "🗜️ 正在生成最终 7z 压缩包..."
 7z a "deepin25_1_0_desktop_${TIMESTAMP}.7z" "$ROOTFS_IMG"
 rm -f "$ROOTFS_IMG"
 
-echo "🎉 终极全包版（含指定上游 Mesa）构建完成！"
+echo "🎉 终极全包版（含Kernel上游固件+外部Mesa）构建完成！"
