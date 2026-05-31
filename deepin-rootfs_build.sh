@@ -27,7 +27,7 @@ ROOTFS_IMG="deepin25_1_0_desktop_${TIMESTAMP}.img"
 
 echo "=========================================="
 echo "⏳ 开始构建最前沿版 Deepin 25.1.0 RootFS"
-echo "🌟 模式: 纯血 Wayland + X11底层支撑 + 全中文环境"
+echo "🌟 模式: 完整全家桶桌面 + 纯血中文环境 + 智能双底座(Wayland/X11)"
 echo "内核版本: $KERNEL"
 echo "=========================================="
 
@@ -80,9 +80,9 @@ chroot rootdir locale-gen zh_CN.UTF-8
 chroot rootdir bash -c "echo -e '1234\n1234' | passwd root"
 echo "deepin-sheng" > rootdir/etc/hostname
 
-# 🚨 核心图形环境与中文字体（补齐 Xorg 画板，防止方块字）
-echo "🖥️ 正在拉取 Deepin Wayland 组件、Xorg 底层与中文字体库..."
-chroot rootdir apt install -y --no-install-recommends deepin-desktop-environment-core dde-session-shell lightdm xwayland deepin-kwin-wayland xserver-xorg xinit fonts-noto-cjk fonts-wqy-microhei
+# 🚨 终极修复：去掉精简参数，强行拉取 Deepin 完整桌面全家桶、Xorg底层与中文字体！
+echo "🖥️ 正在拉取 Deepin 完整桌面生态与中文字体..."
+chroot rootdir apt install -y deepin-desktop-environment lightdm xserver-xorg xinit fonts-noto-cjk fonts-wqy-microhei
 
 chroot rootdir useradd -m -s /bin/bash luser
 echo "luser:luser" | chroot rootdir chpasswd
@@ -101,8 +101,8 @@ ln -sf /run/systemd/resolve/stub-resolv.conf rootdir/etc/resolv.conf
 mkdir -p rootdir/etc/udev/rules.d/
 printf 'ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0 0 0 1"\n' > rootdir/etc/udev/rules.d/99-touchscreen-sheng.rules
 
-# ================= 🌌 纯血 Wayland 智能配置 =================
-echo "🌌 配置全局 Wayland 渲染引擎..."
+# ================= 🌌 图形界面智能配置 =================
+echo "🌌 配置全局 Wayland/X11 智能引导引擎..."
 cat <<EOF > rootdir/etc/profile.d/wayland-force.sh
 export XDG_SESSION_TYPE=wayland
 export QT_QPA_PLATFORM="wayland;xcb"
@@ -111,7 +111,7 @@ export WLR_NO_HARDWARE_CURSORS=1
 EOF
 chmod +x rootdir/etc/profile.d/wayland-force.sh
 
-# 🚨 智能探测真正的 Wayland 会话代号
+# 智能探测真正的会话代号
 mkdir -p rootdir/etc/lightdm/lightdm.conf.d
 cat <<EOF > rootdir/etc/lightdm/lightdm.conf.d/12-autologin.conf
 [Seat:*]
@@ -127,7 +127,7 @@ if [ -n "$WAYLAND_SESSION" ]; then
 else
     # 兜底：如果没找到 Wayland，硬选回 x11
     echo "user-session=dde-x11" >> rootdir/etc/lightdm/lightdm.conf.d/12-autologin.conf
-    echo "⚠️ 警告：未检测到 Wayland 会话，强制回退至 X11"
+    echo "⚠️ 警告：未检测到 Wayland 会话，强制回退至 X11 保证亮屏"
 fi
 
 chroot rootdir systemctl enable lightdm
@@ -166,4 +166,4 @@ echo "🗜️ 正在生成最终 7z 压缩包..."
 7z a "deepin25_1_0_desktop_${TIMESTAMP}.7z" "$ROOTFS_IMG"
 rm -f "$ROOTFS_IMG"
 
-echo "🎉 终极构建完成！祝一次点亮！"
+echo "🎉 终极全包版构建完成！坐等进桌面！"
