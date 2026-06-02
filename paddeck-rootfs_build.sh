@@ -26,7 +26,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 ROOTFS_IMG="paddeck_os_${TIMESTAMP}.img"
 
 echo "=========================================="
-echo "🎮 开始构建 PadDeck OS\"
+echo "🎮 开始构建 PadDeck OS (纯血无 GNOME / 修复转义 / 双轨掌机版)"
 echo "内核版本: $KERNEL"
 echo "=========================================="
 
@@ -47,19 +47,25 @@ printf "deb %s %s main contrib non-free non-free-firmware\n" "$DEBIAN_MIRROR" "$
 printf "deb %s %s-updates main contrib non-free non-free-firmware\n" "$DEBIAN_MIRROR" "$DEBIAN_SUITE" >> rootdir/etc/apt/sources.list
 chroot rootdir apt update
 
+# 🚨 核心权限组件补齐 (解决 Sway 权限卡死和 USB 掉电)，绝对无 GNOME
 chroot rootdir apt install -y --no-install-recommends \
     systemd systemd-resolved libpam-systemd dbus-user-session polkitd sudo vim-tiny wget curl network-manager wpasupplicant locales git 7zip unzip tar qrtr-tools \
     libsdl2-2.0-0 libsdl2-mixer-2.0-0 libvpx9 steam-devices joystick python3-pyqt5 mangohud \
     greetd sway xwayland pipewire pipewire-pulse wireplumber \
     libgl1-mesa-dri libglx-mesa0 libegl-mesa0 mesa-vulkan-drivers mesa-utils
 
-chroot rootdir bash -c "echo 'LANG=en_US.UTF-8' > /etc/default/locale"
-chroot rootdir sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+# ================= 🚨 GitHub Actions 引号转义终极修复区 =================
+echo "🌐 正在配置系统语言与基础账户..."
+echo 'LANG=en_US.UTF-8' > rootdir/etc/default/locale
+sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' rootdir/etc/locale.gen
 chroot rootdir locale-gen en_US.UTF-8
-chroot rootdir bash -c "echo -e '1234\n1234' | passwd root"
-echo "paddeck-sm8550" > rootdir/etc/hostname
 
-echo "📥 注入骁龙固件..."
+# 弃用 passwd，改用防转义的 chpasswd
+echo "root:1234" | chroot rootdir chpasswd
+echo "paddeck-sm8550" > rootdir/etc/hostname
+# =====================================================================
+
+echo "📥 注入骁龙闭源固件..."
 mkdir -p rootdir/tmp/linux-fw
 git clone --depth 1 --filter=blob:none --sparse https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git rootdir/tmp/linux-fw
 git -C rootdir/tmp/linux-fw sparse-checkout set qcom
@@ -71,9 +77,9 @@ echo "🔧 注入 Wi-Fi 修复补丁..."
 wget -qO rootdir/tmp/firmware-sheng-wififix.deb "https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/releases/download/fix/firmware-sheng-wififix.deb"
 chroot rootdir apt install -y /tmp/firmware-sheng-wififix.deb
 
+# 创建玩家账户并赋予护航权限组
 chroot rootdir useradd -m -s /bin/bash luser
 echo "luser:luser" | chroot rootdir chpasswd
-# 补回 video 和 input 组权限，确保护航
 chroot rootdir usermod -aG sudo,audio,video,render,input luser
 
 echo "🚀 植入 Valve 官方 ARM64 Steam 客户端..."
@@ -84,6 +90,7 @@ mkdir -p rootdir/home/luser/.local/share/Steam/compatibilitytools.d
 mkdir -p rootdir/home/luser/.steam
 mkdir -p rootdir/home/luser/.config/MangoHud
 
+# 🚨 软件层：锁定 120Hz 渲染，防止高负载崩溃
 cat <<EOF > rootdir/home/luser/.config/MangoHud/MangoHud.conf
 legacy_layout=false
 horizontal
@@ -106,7 +113,7 @@ mv rootdir/tmp/steam_arm_extracted/steamrtarm64 rootdir/home/luser/.local/share/
 echo "publicbeta" > rootdir/home/luser/.local/share/Steam/package/beta
 chroot rootdir bash -c "ln -sf /home/luser/.local/share/Steam/linuxarm64 /home/luser/.steam/sdkarm64"
 
-echo "📦 注入 Proton 11 ARM64..."
+echo "📦 注入 Proton 11 ARM64 武器库..."
 wget -qO rootdir/tmp/ARM64proton-Runtime64.tar.gz "https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/releases/download/app/ARM64proton-Runtime64.tar.gz"
 tar -xzf rootdir/tmp/ARM64proton-Runtime64.tar.gz -C rootdir/home/luser/.local/share/Steam/compatibilitytools.d/
 
@@ -115,8 +122,8 @@ chroot rootdir chown -R luser:luser /home/luser/.local
 chroot rootdir chown -R luser:luser /home/luser/.steam
 chroot rootdir chown -R luser:luser /home/luser/.config
 
-# ================= 🚀 OOBE 与 Sway 环境注入 =================
-echo "🎨 正在配置 Sway 与 OOBE 引导..."
+# ================= 🚀 OOBE 与 Sway 独占混合环境注入 =================
+echo "🎨 正在配置 Sway 双轨容器与 OOBE 引导..."
 
 cat << 'EOF' > rootdir/usr/local/bin/paddeck-oobe.py
 #!/usr/bin/env python3
@@ -204,7 +211,6 @@ class PadDeckOOBE(QWidget):
         QApplication.quit()
 
 if __name__ == '__main__':
-    # 强制在 Wayland 环境下运行
     os.environ['QT_QPA_PLATFORM'] = 'wayland'
     app = QApplication(sys.argv)
     ex = PadDeckOOBE()
@@ -239,7 +245,7 @@ default_floating_border none
 bar {
     mode invisible
 }
-# 🚨 强制锁定 120Hz 防驱动崩溃
+# 🚨 物理层：强制锁定 120Hz 防驱动崩溃 (适配小米 Pad 6S Pro)
 output * mode 3048x2032@120Hz bg #000000 solid_color
 
 exec swayidle -w timeout 600 'swaymsg "output * dpms off"' resume 'swaymsg "output * dpms on"'
@@ -301,4 +307,4 @@ echo "🗜️ 正在生成最终 7z 压缩包 (极速模式)..."
 7z a -mx=1 "paddeck_os_sm8550_${TIMESTAMP}.7z" "$SPARSE_IMG"
 rm -f "$ROOTFS_IMG" "$SPARSE_IMG"
 
-echo "🎉 PadDeck OS构建成功！"
+echo "🎉 Fastboot 专用 PadDeck OS (最终绝杀版) 构建成功！"
