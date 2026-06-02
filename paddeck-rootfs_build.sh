@@ -26,7 +26,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 ROOTFS_IMG="paddeck_os_${TIMESTAMP}.img"
 
 echo "=========================================="
-echo "🎮 开始构建 PadDeck OS"
+echo "🎮 开始构建 PadDeck OS (SteamOS 沉浸掌机版)"
 echo "内核版本: $KERNEL"
 echo "=========================================="
 
@@ -47,10 +47,10 @@ printf "deb %s %s main contrib non-free non-free-firmware\n" "$DEBIAN_MIRROR" "$
 printf "deb %s %s-updates main contrib non-free non-free-firmware\n" "$DEBIAN_MIRROR" "$DEBIAN_SUITE" >> rootdir/etc/apt/sources.list
 chroot rootdir apt update
 
-# 注入底层工具与多媒体库
+# 🚨 增强：加入 steam-devices 和 joystick 确保全品类手柄即插即用
 chroot rootdir apt install -y --no-install-recommends \
     systemd systemd-resolved sudo vim-tiny wget curl network-manager wpasupplicant dbus locales git 7zip unzip tar \
-    libsdl2-2.0-0 libsdl2-mixer-2.0-0 libvpx7
+    libsdl2-2.0-0 libsdl2-mixer-2.0-0 libvpx9 steam-devices joystick
 
 chroot rootdir bash -c "echo 'LANG=en_US.UTF-8' > /etc/default/locale"
 chroot rootdir sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
@@ -86,13 +86,29 @@ chroot rootdir bash -c "ln -sf /usr/lib/aarch64-linux-gnu/libvpx.so.9 /usr/lib/a
 mkdir -p rootdir/home/luser/.local/share/Steam/package
 mkdir -p rootdir/home/luser/.local/share/Steam/compatibilitytools.d
 mkdir -p rootdir/home/luser/.steam
+mkdir -p rootdir/home/luser/.config/MangoHud
+
+# 📊 注入 Steam Deck 风格的性能浮窗配置 (MangoHud)
+cat <<EOF > rootdir/home/luser/.config/MangoHud/MangoHud.conf
+legacy_layout=false
+horizontal
+battery
+gpu_stats
+cpu_stats
+ram
+vram
+fps
+frametime
+hud_no_margin
+table_columns=14
+frame_timing=1
+EOF
 
 wget -qO rootdir/tmp/steam_arm.zip https://client-update.steamstatic.com/bins_linuxarm64_linuxarm64.zip.f523fa87fc6b9b5435a5e7370cb0d664ef53b50b
 unzip -q rootdir/tmp/steam_arm.zip -d rootdir/tmp/steam_arm_extracted
 mv rootdir/tmp/steam_arm_extracted/steamrtarm64 rootdir/home/luser/.local/share/Steam/
 
 echo "publicbeta" > rootdir/home/luser/.local/share/Steam/package/beta
-
 chroot rootdir bash -c "ln -sf /home/luser/.local/share/Steam/linuxarm64 /home/luser/.steam/sdkarm64"
 
 echo "📦 注入 Proton 11 ARM64 武器库..."
@@ -102,6 +118,7 @@ tar -xzf rootdir/tmp/ARM64proton-Runtime64.tar.gz -C rootdir/home/luser/.local/s
 chmod -R u+rwx rootdir/home/luser/.local/share/Steam/steamrtarm64/
 chroot rootdir chown -R luser:luser /home/luser/.local
 chroot rootdir chown -R luser:luser /home/luser/.steam
+chroot rootdir chown -R luser:luser /home/luser/.config
 # ==============================================================
 
 chroot rootdir bash -c "echo 'ttyMSM0' >> /etc/securetty"
@@ -121,13 +138,13 @@ autologin-user-timeout=0
 user-session=gamescope-session
 EOF
 
-# Gamescope 独占启动配置
+# 🎮 终极伪装：强制唤醒 Steam Deck 专属 UI，并启用全屏与性能浮窗
 mkdir -p rootdir/usr/share/wayland-sessions
 cat <<EOF > rootdir/usr/share/wayland-sessions/gamescope-session.desktop
 [Desktop Entry]
-Name=PadDeck Game Mode
-Comment=Start Steam directly via Gamescope
-Exec=gamescope -W 3096 -H 1920 -r 144 -e -- /home/luser/.local/share/Steam/steamrtarm64/steam -tenfoot
+Name=SteamOS Mode
+Comment=Start Steam Deck UI directly via Gamescope
+Exec=gamescope -W 3096 -H 1920 -r 144 -f -e -- mangohud /home/luser/.local/share/Steam/steamrtarm64/steam -gamepadui -steamos3 -steampal -steamdeck
 Type=Application
 EOF
 
@@ -152,4 +169,4 @@ echo "✅ 镜像生成完成: $ROOTFS_IMG"
 7z a "paddeck_os_sm8550_${TIMESTAMP}.7z" "$ROOTFS_IMG"
 rm -f "$ROOTFS_IMG"
 
-echo "🎉 PadDeck OS 构建成功！"
+echo "🎉 PadDeck OS (SteamOS 体验版) 构建成功！"
