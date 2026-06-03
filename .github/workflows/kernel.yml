@@ -87,8 +87,8 @@ jobs:
         if: steps.collect_artifacts.outputs.pkg_count > 0 && github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: unified-kernel-${{ github.event.inputs.kernel_version || '7.1' }}
-          name: "🔥 Unified Kernel v${{ github.event.inputs.kernel_version || '7.1' }}"
+          tag_name: kernel-${{ github.event.inputs.kernel_version || '7.1' }}
+          name: "🔥 Kernel v${{ github.event.inputs.kernel_version || '7.1' }}"
           body: |
             🧩 **骁龙 8 Gen 2 通用内核 v${{ github.event.inputs.kernel_version || '7.1' }}**
             
