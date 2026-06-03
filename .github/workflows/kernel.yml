@@ -1,4 +1,4 @@
-name: Build Unified Kernel (All Distros)
+name: Build Kernel
 
 on:
   workflow_dispatch:
