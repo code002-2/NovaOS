@@ -229,4 +229,4 @@ echo "🗜️ 正在生成最终 7z 压缩包..."
 # 清理原始镜像和中间文件
 rm -f "$ROOTFS_IMG" "$SPARSE_IMG"
 
-echo "🎉 Fastboot 专用精简桌面版 Arch Linux ARM 自动化编译全部圆满成功！"
+echo "🎉Arch Linux ARM 自动化编译全部圆满成功！"
