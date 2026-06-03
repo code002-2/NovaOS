@@ -79,13 +79,31 @@ if ls *.deb 1> /dev/null 2>&1; then
         dpkg-deb --fsys-tarfile "$pkg" | tar -x --keep-directory-symlink -C rootdir/
     done
     
-    echo "   正在更新内核模块依赖..."
-    # 动态侦测真正的内核文件夹名称，完美适配 7.1.0-rc6
-    KERNEL_MODULE_DIR=$(ls rootdir/usr/lib/modules/ | head -n 1)
+    echo "   正在更新内核模块依赖并生成引导镜像..."
+    # 动态侦测真正的内核文件夹名称
+    KERNEL_MODULE_DIR=$(ls -1t rootdir/usr/lib/modules/ | head -n 1)
     if [ -n "$KERNEL_MODULE_DIR" ]; then
         echo "   ✅ 动态识别到真实内核版本目录: $KERNEL_MODULE_DIR"
         chroot rootdir /usr/bin/depmod -a "$KERNEL_MODULE_DIR" || true
-        echo "   ✅ 内核驱动索引重建完成！"
+        
+        # ==========================================
+        # 🚨 核心修复：为 Arch 强制生成 Initramfs 并重命名内核
+        # ==========================================
+        echo "   ⚙️ 正在安装 mkinitcpio 并生成初始内存盘 (Initramfs)..."
+        chroot rootdir pacman -S --noconfirm --needed mkinitcpio
+        
+        # 强制用新内核的模块生成 Arch 标准的引导镜像
+        chroot rootdir mkinitcpio -k "$KERNEL_MODULE_DIR" -g "/boot/initramfs-linux.img"
+        
+        # 将 Debian 格式的 vmlinuz 内核重命名为 ARM64 标准的 Image
+        if [ -f "rootdir/boot/vmlinuz-$KERNEL_MODULE_DIR" ]; then
+            echo "   🔄 正在适配 Bootloader 内核命名..."
+            cp "rootdir/boot/vmlinuz-$KERNEL_MODULE_DIR" "rootdir/boot/Image"
+            cp "rootdir/boot/vmlinuz-$KERNEL_MODULE_DIR" "rootdir/boot/vmlinuz-linux"
+        fi
+        echo "   ✅ 内核引导镜像与 Initramfs 彻底生成完毕！"
+        # ==========================================
+        
     else
         echo "   ⚠️ 未能在 /usr/lib/modules/ 中找到内核模块目录。"
     fi
@@ -158,8 +176,6 @@ if [ -f "$FW_DIR/board-2.bin" ]; then
 else
     echo "⚠️ 警告: 未找到 board-2.bin，无法自动伪装，请确认您的固件包是否完整。"
 fi
-
-# (已移除导致开机黑屏的错误文件夹强制改名逻辑)
 
 # 2. 自动设置 qrtr 服务开机自启 (解决 -110 超时报错)
 chroot rootdir systemctl enable qrtr-ns || true
