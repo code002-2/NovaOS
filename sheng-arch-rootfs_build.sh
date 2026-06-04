@@ -73,8 +73,11 @@ setup_base_env() {
     mount -t proc proc rootdir/proc
     mount -t sysfs sys rootdir/sys
 
+    rm -f rootdir/etc/resolv.conf
     echo "nameserver 8.8.8.8" > rootdir/etc/resolv.conf
     echo "nameserver 1.1.1.1" >> rootdir/etc/resolv.conf
+    echo "nameserver 208.67.222.222" >> rootdir/etc/resolv.conf
+    
     echo "Server = $ALARM_MIRROR/\$arch/\$repo" > rootdir/etc/pacman.d/mirrorlist
 
     chroot rootdir pacman-key --init
