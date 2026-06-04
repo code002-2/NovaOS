@@ -3,120 +3,203 @@ set -e
 
 IMAGE_SIZE="8G"
 FILESYSTEM_UUID="ee8d3593-59b1-480e-a3b6-4fefb17ee7d8"
-DEBIAN_SUITE="trixie"
-DEBIAN_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/debian"
 
-usage() {
-    echo "用法: $0 <distro_name> <kernel_version>"
+if [ $# -lt 2 ]; then
+    echo "用法: $0 <distro-variant> <kernel_version>"
+    echo "示例: $0 debian-desktop 7.1"
     exit 1
-}
-
-if [ $# -ne 2 ]; then
-    usage
 fi
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "请使用root权限运行"
+    echo "❌ 请使用 root 权限运行此脚本！"
     exit 1
 fi
 
 DISTRO=$1
 KERNEL=$2
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-ROOTFS_IMG="debian13_desktop_${TIMESTAMP}.img"
 
-echo "=========================================="
-echo "⏳ 开始构建纯净桌面版 Debian 13 (Trixie) RootFS"
-echo "内核版本: $KERNEL"
-echo "=========================================="
+distro_type=$(echo "$DISTRO" | cut -d'-' -f1)
+distro_variant=$(echo "$DISTRO" | cut -d'-' -f2)
 
-rm -rf rootdir || true
-truncate -s $IMAGE_SIZE "$ROOTFS_IMG"
-mkfs.ext4 "$ROOTFS_IMG"
-mkdir rootdir
-mount -o loop "$ROOTFS_IMG" rootdir
-
-# 基础系统自举安装
-debootstrap --arch=arm64 "$DEBIAN_SUITE" rootdir "$DEBIAN_MIRROR"
-
-mount --bind /dev rootdir/dev
-mount --bind /dev/pts rootdir/dev/pts
-mount -t proc proc rootdir/proc
-mount -t sysfs sys rootdir/sys
-
-# 严格配置 Debian 官方国内镜像源（无残留）
-printf "deb %s %s main contrib non-free non-free-firmware\n" "$DEBIAN_MIRROR" "$DEBIAN_SUITE" > rootdir/etc/apt/sources.list
-printf "deb %s %s-updates main contrib non-free non-free-firmware\n" "$DEBIAN_MIRROR" "$DEBIAN_SUITE" >> rootdir/etc/apt/sources.list
-printf "deb %s %s-proposed-updates main contrib non-free non-free-firmware\n" "$DEBIAN_MIRROR" "$DEBIAN_SUITE" >> rootdir/etc/apt/sources.list
-chroot rootdir apt update
-
-if ls *.deb 1> /dev/null 2>&1; then
-    cp *.deb rootdir/tmp/
-    chroot rootdir bash -c "apt install -y /tmp/*.deb || true"
+if [ "$distro_type" != "debian" ]; then
+    echo "❌ 目前仅支持 debian 衍生版"
+    exit 1
 fi
 
-# 🚨 精简修改：移除了带有 Server 标记的 openssh-server 构建依赖，仅保留桌面终端必需的底层连接件
-chroot rootdir apt install -y --no-install-recommends \
-    systemd systemd-resolved sudo vim-tiny wget curl network-manager wpasupplicant dbus locales
+distro_version="trixie"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
-# 🌐 语言环境初始化 (🚨 修复：将路径完美纠正为 Debian 官方的 /etc/locale.gen)
-chroot rootdir bash -c "echo 'LANG=en_US.UTF-8' > /etc/default/locale"
-chroot rootdir sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
-chroot rootdir locale-gen en_US.UTF-8
+# ==========================================
+# 🛡️ 容错防线：无论发生什么，确保安全卸载
+# ==========================================
+cleanup_mounts() {
+    echo "🧹 正在触发挂载点安全清理机制..."
+    fuser -k -9 -m rootdir 2>/dev/null || true
+    sleep 2
+    umount -l rootdir/dev/pts 2>/dev/null || true
+    umount -l rootdir/dev 2>/dev/null || true
+    umount -l rootdir/proc 2>/dev/null || true
+    umount -l rootdir/sys 2>/dev/null || true
+    umount -l rootdir 2>/dev/null || true
+    rm -rf rootdir
+}
+trap cleanup_mounts EXIT ERR INT TERM
 
-# 密码设置
-chroot rootdir bash -c "echo -e '1234\n1234' | passwd root"
+# 🔥 定义需要构建的变体
+FLAVOURS=("gnome")
+BOOTMODES=("dual" "single")
 
-# 主机名完全调整为 debian-sheng
-echo "debian-sheng" > rootdir/etc/hostname
+for FLAVOUR in "${FLAVOURS[@]}"; do
+    for MODE in "${BOOTMODES[@]}"; do
 
-# 仅通过 task-gnome-desktop 编译 Debian 标准图形层
-chroot rootdir apt install -y --no-install-recommends task-gnome-desktop gdm3
+        echo ""
+        echo "======================================"
+        echo "🚀 开始构建: Debian $distro_version | $FLAVOUR | $MODE"
+        echo "======================================"
 
-# 创建普通用户并分配合规的硬件访问权限组
-chroot rootdir useradd -m -s /bin/bash luser
-echo "luser:luser" | chroot rootdir chpasswd
-chroot rootdir usermod -aG sudo,audio,video,render,input luser
+        ROOTFS_IMG="${distro_type}_${distro_version}_${FLAVOUR}_${MODE}_${TIMESTAMP}.img"
 
-echo "🩹 正在针对高通 SM8550 (Sheng) 注入底层自愈补丁..."
-chroot rootdir bash -c "echo 'ttyMSM0' >> /etc/securetty"
-ln -sf /lib/systemd/system/getty@.service rootdir/etc/systemd/system/getty.target.wants/getty@ttyMSM0.service
+        # 确保环境干净
+        cleanup_mounts 
+        mkdir -p rootdir
 
-# 激活 DNS 托管解析
-chroot rootdir systemctl enable systemd-resolved
-ln -sf /run/systemd/resolve/stub-resolv.conf rootdir/etc/resolv.conf
+        truncate -s $IMAGE_SIZE "$ROOTFS_IMG"
+        mkfs.ext4 -O ^metadata_csum "$ROOTFS_IMG"
+        mount -o loop "$ROOTFS_IMG" rootdir
 
-# 触控屏幕方向与矩阵校准规则
-mkdir -p rootdir/etc/udev/rules.d/
-printf 'ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0 0 0 1"\n' > rootdir/etc/udev/rules.d/99-touchscreen-sheng.rules
+        echo "⬇️ 正在使用 debootstrap 拉取基础系统..."
+        debootstrap --arch=arm64 "$distro_version" rootdir http://deb.debian.org/debian/
 
-# GDM3 自动登录配置。改用纯净的常规配置写法
-mkdir -p rootdir/etc/gdm3
-printf "[daemon]\nAutomaticLoginEnable=true\nAutomaticLogin=luser\n" > rootdir/etc/gdm3/daemon.conf
-chroot rootdir systemctl enable gdm3
+        mount --bind /dev rootdir/dev
+        mount --bind /dev/pts rootdir/dev/pts
+        mount -t proc proc rootdir/proc
+        mount -t sysfs sys rootdir/sys
 
-# 强制进入图形化靶位
-chroot rootdir systemctl set-default graphical.target
+        # 🚨 核心网络修复：注入 DNS 防止 apt 卡死
+        rm -f rootdir/etc/resolv.conf
+        echo "nameserver 8.8.8.8" > rootdir/etc/resolv.conf
+        echo "nameserver 1.1.1.1" >> rootdir/etc/resolv.conf
+        echo "nameserver 223.5.5.5" >> rootdir/etc/resolv.conf # 加入阿里云DNS加速国内解析
 
-# 文件系统挂载对齐
-printf "PARTLABEL=linux / ext4 defaults,noatime,errors=remount-ro 0 1\n" > rootdir/etc/fstab
+        echo "📦 正在安装基础环境组件..."
+        chroot rootdir bash -c "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y --no-install-recommends systemd sudo vim wget curl network-manager openssh-server wpasupplicant dbus locales dialog"
 
-# 清理构建缓存
-chroot rootdir apt clean
-chroot rootdir rm -rf /tmp/*.deb
+        # ==========================================
+        # 🌏 注入全面中文环境与时区
+        # ==========================================
+        echo "🌏 正在配置系统中文语言、字体与输入法..."
+        
+        # 开启中英文双语 Locale
+        sed -i 's/^# *\(en_US.UTF-8\)/\1/' rootdir/etc/locale.gen
+        sed -i 's/^# *\(zh_CN.UTF-8\)/\1/' rootdir/etc/locale.gen
+        chroot rootdir locale-gen
+        
+        # 设置系统默认语言为简体中文
+        echo "LANG=zh_CN.UTF-8" > rootdir/etc/default/locale
+        echo "LANG=zh_CN.UTF-8" > rootdir/etc/locale.conf
+        
+        # 设置时区为上海 (CST)
+        chroot rootdir ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+        
+        # 安装中文字体与 Fcitx5 输入法全家桶
+        chroot rootdir bash -c "export DEBIAN_FRONTEND=noninteractive && apt-get install -y fonts-noto-cjk fonts-wqy-microhei fonts-wqy-zenhei fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk3 fcitx5-frontend-qt5"
+        
+        # 配置输入法环境变量
+        cat > rootdir/etc/environment <<EOF
+GTK_IM_MODULE=fcitx
+QT_IM_MODULE=fcitx
+XMODIFIERS=@im=fcitx
+EOF
+        # ==========================================
 
-umount rootdir/dev/pts || true
-umount rootdir/dev || true
-umount rootdir/proc || true
-umount rootdir/sys || true
-umount rootdir || true
-rm -rf rootdir
+        echo "📦 正在注入并安装设备专属 .deb 驱动包..."
+        wget -q https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/releases/download/mipps/xiaomi-mipps-auth_0.11_arm64.deb
+        cp *.deb rootdir/tmp/
 
-tune2fs -U $FILESYSTEM_UUID "$ROOTFS_IMG"
+        chroot rootdir bash -c "export DEBIAN_FRONTEND=noninteractive && apt-get install -y libglib2.0-0 libprotobuf-c1 libqmi-glib5 libmbim-glib4 initramfs-tools"
+        chroot rootdir bash -c "export DEBIAN_FRONTEND=noninteractive && apt-get install -y /tmp/*.deb" || echo "⚠️ 部分 .deb 安装出现警告，请检查依赖关系。"
+        
+        echo "✅ 自定义驱动安装完毕！"
 
-echo "✅ 镜像生成完成: $ROOTFS_IMG"
-echo "🗜️ 正在生成最终 7z 压缩包..."
-7z a "debian13_desktop_${TIMESTAMP}.7z" "$ROOTFS_IMG"
-rm -f "$ROOTFS_IMG"
+        chroot rootdir bash -c "echo 'root:1234' | chpasswd"
+        echo "debian-$FLAVOUR-$MODE" > rootdir/etc/hostname
 
-echo "🎉 精简桌面版 Debian 13 自动化编译全部圆满成功！"
+        # =========================
+        # 🖥️ 桌面环境部署
+        # =========================
+        if [ "$distro_variant" = "desktop" ]; then
+            
+            chroot rootdir useradd -m -s /bin/bash luser || true
+            chroot rootdir bash -c "echo 'luser:luser' | chpasswd"
+            chroot rootdir usermod -aG sudo,audio,video,input luser
+
+            if [ "$FLAVOUR" = "lomiri" ]; then
+                echo "🖥️ 安装 Lomiri (Ubuntu Touch) 桌面..."
+                chroot rootdir bash -c "export DEBIAN_FRONTEND=noninteractive && apt-get install -y lomiri lomiri-desktop-session lomiri-system-settings lightdm lightdm-gtk-greeter firefox-esr"
+                
+                chroot rootdir systemctl disable gdm3 2>/dev/null || true
+                chroot rootdir systemctl enable lightdm
+
+                mkdir -p rootdir/etc/lightdm/lightdm.conf.d
+                cat > rootdir/etc/lightdm/lightdm.conf.d/50-autologin.conf <<EOF
+[Seat:*]
+autologin-user=luser
+autologin-user-timeout=0
+user-session=lomiri
+greeter-session=lightdm-gtk-greeter
+EOF
+
+            elif [ "$FLAVOUR" = "gnome" ]; then
+                echo "🖥️ 安装 GNOME 桌面环境..."
+                chroot rootdir bash -c "export DEBIAN_FRONTEND=noninteractive && apt-get install -y gnome-shell gnome-session gnome-terminal gdm3 firefox-esr gnome-tweaks nautilus"
+                
+                chroot rootdir systemctl enable gdm3
+                
+                mkdir -p rootdir/etc/gdm3
+                cat > rootdir/etc/gdm3/daemon.conf <<EOF
+[daemon]
+AutomaticLoginEnable=true
+AutomaticLogin=luser
+EOF
+            fi
+
+            chroot rootdir systemctl enable NetworkManager
+            chroot rootdir systemctl set-default graphical.target
+        fi
+
+        # =========================
+        # 💽 FSTAB 挂载策略
+        # =========================
+        if [ "$MODE" = "dual" ]; then
+            echo "PARTLABEL=linux / ext4 defaults,noatime,errors=remount-ro 0 1" > rootdir/etc/fstab
+        else
+            echo "PARTLABEL=userdata / ext4 defaults,noatime,errors=remount-ro 0 1" > rootdir/etc/fstab
+        fi
+
+        # =========================
+        # 🏁 清理与生成镜像
+        # =========================
+        echo "🧹 正在清理 apt 缓存以减小镜像体积..."
+        chroot rootdir apt-get clean
+        rm -f rootdir/tmp/*.deb
+
+        cleanup_mounts
+
+        tune2fs -U $FILESYSTEM_UUID "$ROOTFS_IMG"
+
+        echo "🔄 正在转换为 Fastboot 专用稀疏镜像 (Sparse Image)..."
+        SPARSE_IMG="sparse_${ROOTFS_IMG}"
+        img2simg "$ROOTFS_IMG" "$SPARSE_IMG"
+
+        echo "🗜️ 正在执行高压压缩..."
+        7z a "${ROOTFS_IMG%.img}.7z" "$SPARSE_IMG"
+
+        rm -f "$ROOTFS_IMG" "$SPARSE_IMG"
+        
+        echo "🎉 [$FLAVOUR - $MODE] 版本构建完成！产物: ${ROOTFS_IMG%.img}.7z"
+
+    done
+done
+
+trap - EXIT ERR INT TERM
+echo "✅ 所有指定的 Debian 镜像已全部打包完毕！"
