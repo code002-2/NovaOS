@@ -40,8 +40,11 @@ permissions:
 jobs:
   prepare-release:
     runs-on: ubuntu-24.04-arm
+    # 🚨 核心修复 1：将计算好的动态矩阵暴露出给下游 Job 使用
     outputs:
       release_tag: ${{ steps.tag.outputs.release_tag }}
+      matrix_desktop: ${{ steps.set-matrix.outputs.desktop }}
+      matrix_boot: ${{ steps.set-matrix.outputs.boot }}
     steps:
       - name: Generate release tag
         id: tag
@@ -49,6 +52,24 @@ jobs:
           DE_SUFFIX="${{ github.event.inputs.desktop_env || 'all' }}"
           TAG="debian13-${DE_SUFFIX}-$(date -u '+%Y%m%d')-${GITHUB_SHA::8}"
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+
+      # 🚨 核心修复 2：用 Bash 脚本动态计算 JSON 格式的矩阵数组
+      - name: 🧮 Generate Dynamic Matrix
+        id: set-matrix
+        run: |
+          DESKTOP="${{ github.event.inputs.desktop_env || 'all' }}"
+          if [ "$DESKTOP" == "all" ]; then
+            echo 'desktop=["gnome", "kde"]' >> $GITHUB_OUTPUT
+          else
+            echo "desktop=[\"$DESKTOP\"]" >> $GITHUB_OUTPUT
+          fi
+          
+          BOOT="${{ github.event.inputs.boot_mode || 'all' }}"
+          if [ "$BOOT" == "all" ]; then
+            echo 'boot=["dual", "single"]' >> $GITHUB_OUTPUT
+          else
+            echo "boot=[\"$BOOT\"]" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create GitHub Release
         if: ${{ !github.event.inputs.skip_release }}
@@ -91,17 +112,12 @@ jobs:
     runs-on: ubuntu-24.04-arm
     needs: prepare-release
     strategy:
-      # 即使其中一个（如KDE）失败了，也不要取消其他正在运行的任务
       fail-fast: false 
+      # 🚨 核心修复 3：从上一阶段读取 JSON 格式的动态数组，彻底解决 if 报错！
       matrix:
-        desktop: [gnome, kde]
-        boot: [dual, single]
-    
-    # 🚨 核心过滤黑科技：根据你在网页上的选择，智能决定唤醒几台服务器
-    if: >
-      (github.event.inputs.desktop_env == 'all' || github.event.inputs.desktop_env == matrix.desktop) &&
-      (github.event.inputs.boot_mode == 'all' || github.event.inputs.boot_mode == matrix.boot)
-
+        desktop: ${{ fromJSON(needs.prepare-release.outputs.matrix_desktop) }}
+        boot: ${{ fromJSON(needs.prepare-release.outputs.matrix_boot) }}
+        
     steps:
       - uses: actions/checkout@v4
       
@@ -124,7 +140,7 @@ jobs:
         id: build
         run: |
           chmod +x sheng-rootfs_build.sh
-          # 🚨 极速模式：把当前矩阵分配到的唯一任务（例如 kde single）传给脚本
+          # 把矩阵分配到的专属任务传给构建脚本
           sudo bash sheng-rootfs_build.sh debian-desktop "${{ github.event.inputs.kernel_version || '7.1' }}" "${{ matrix.boot }}" "${{ matrix.desktop }}"
           
           PKG_COUNT=$(ls -1 *.7z 2>/dev/null | wc -l)
@@ -133,7 +149,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          # 每个包用自己的专属名字存放，避免覆盖
           name: debian-${{ matrix.desktop }}-${{ matrix.boot }}
           path: "*.7z"
           retention-days: 7
