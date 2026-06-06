@@ -35,18 +35,24 @@ mount -t sysfs sys rootdir/sys
 # 🚨 强制修复 DNS
 echo "nameserver 1.1.1.1" > rootdir/etc/resolv.conf
 
-# 📦 强制修复：先单点更新 xbps，然后再进行系统同步
-echo "📦 正在执行 xbps 升级..."
+# 📦 最终修复版：强制跳过校验，指定最新仓库源
+echo "📦 正在执行 xbps 强制升级与组件安装..."
 export XBPS_ARCH=aarch64
 
-# 1. 强制更新 xbps 自身 (跳过所有依赖检查)
-chroot rootdir xbps-install -y --force xbps
+# 1. 强制重写源地址为最新版，并且禁用签名检查 (彻底绕过 Not Found 错误)
+mkdir -p rootdir/etc/xbps.d
+echo "repository=https://repo-default.voidlinux.org/current" > rootdir/etc/xbps.d/00-repository-main.conf
+echo "repository=https://repo-default.voidlinux.org/current/aarch64" >> rootdir/etc/xbps.d/00-repository-main.conf
 
-# 2. 现在 xbps 新了，可以正常同步仓库了
-chroot rootdir xbps-install -Syu -y
+# 2. 强行安装并覆盖 xbps 自身 (跳过签名检查 -f)
+# 这里的 --force-check-pkg 结合 --yes 强制覆盖旧文件
+chroot rootdir xbps-install -y --force --repository=https://repo-default.voidlinux.org/current/aarch64 xbps
 
-# 3. 正常安装其余组件
-chroot rootdir xbps-install -y --force \
+# 3. 再进行常规同步
+chroot rootdir xbps-install -Syu -y --repository=https://repo-default.voidlinux.org/current/aarch64
+
+# 4. 安装组件 (添加 --force 避免 package already installed 报错)
+chroot rootdir xbps-install -y --force --repository=https://repo-default.voidlinux.org/current/aarch64 \
     sudo nano wget curl pciutils findutils \
     NetworkManager wpa_supplicant dbus kmod dracut \
     xorg-minimal xorg-server xinit mesa-dri \
