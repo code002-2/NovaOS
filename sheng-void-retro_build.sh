@@ -8,19 +8,21 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 ROOTFS_IMG="void_retro_${TIMESTAMP}.img"
 
 echo "=========================================="
-echo "🎮 正在构建 Void Retro Gaming OS"
+echo "🎮 正在构建 Void Retro Gaming OS (最终修复版)"
 echo "=========================================="
 
-# 🛡️ 容错清理
 rm -rf rootdir || true
 truncate -s $IMAGE_SIZE "$ROOTFS_IMG"
-mkfs.ext4 "$ROOTFS_IMG"
+mkfs.ext4 -F "$ROOTFS_IMG"
 mkdir rootdir
 mount -o loop "$ROOTFS_IMG" rootdir
 
-# ⬇️ 提取 Void Linux 底包
+# ⬇️ 提取底包 (增加重试逻辑)
+echo "⬇️ 正在提取 Void Linux 底包..."
 VOID_REPO="https://repo-default.voidlinux.org/live/current"
-LATEST_TAR=$(curl -s "$VOID_REPO/" | grep -o 'void-aarch64-ROOTFS-[0-9]*.tar.xz' | head -n 1)
+for i in {1..5}; do
+    LATEST_TAR=$(curl -s --retry 3 --connect-timeout 10 "$VOID_REPO/" | grep -o 'void-aarch64-ROOTFS-[0-9]*.tar.xz' | head -n 1) && break || sleep 5
+done
 wget -q "$VOID_REPO/$LATEST_TAR"
 tar -xpf "$LATEST_TAR" -C rootdir/
 rm -f "$LATEST_TAR"
@@ -30,15 +32,25 @@ mount --bind /dev/pts rootdir/dev/pts
 mount -t proc proc rootdir/proc
 mount -t sysfs sys rootdir/sys
 
-# 📦 安装必要组件
-chroot rootdir xbps-install -Syu
-chroot rootdir xbps-install -y \
+# 🚨 强制修复 DNS
+echo "nameserver 1.1.1.1" > rootdir/etc/resolv.conf
+
+# 📦 关键修复：先更新 xbps 自身，再同步仓库，使用 --force 跳过包冲突
+echo "📦 正在安装组件..."
+export XBPS_ARCH=aarch64
+# 循环重试同步仓库
+for i in {1..5}; do
+    chroot rootdir xbps-install -Syu && break || sleep 10
+done
+
+# 安装核心组件 (去掉 retroarch-assets 这种不存在的包)
+chroot rootdir xbps-install -y --force \
     sudo nano wget curl pciutils findutils \
     NetworkManager wpa_supplicant dbus kmod dracut \
     xorg-minimal xorg-server xinit mesa-dri \
-    retroarch retroarch-assets libretro-core-info qrtr
+    retroarch qrtr
 
-# 🔨 绝对路径锁定法注入内核
+# 🔨 强行注入 Deb 内核 (带绝对版本锁)
 if ls *.deb 1> /dev/null 2>&1; then
     for pkg in *.deb; do
         dpkg-deb --fsys-tarfile "$pkg" | tar -x --keep-directory-symlink -C rootdir/
@@ -49,38 +61,33 @@ if ls *.deb 1> /dev/null 2>&1; then
     cp "rootdir/boot/vmlinuz-$REAL_KERNEL_VER" "rootdir/boot/Image"
 fi
 
+# 🔑 密码注入 (SHA-512)
 chroot rootdir useradd -m -s /bin/bash luser
-PASS_HASH=$(openssl passwd -6 "luser")
-chroot rootdir usermod -p "$PASS_HASH" luser
+echo "luser:$(openssl passwd -6 'luser')" | chroot rootdir chpasswd -e
+echo "root:$(openssl passwd -6 '1234')" | chroot rootdir chpasswd -e
 chroot rootdir usermod -aG wheel,audio,video,input luser
-ROOT_HASH=$(openssl passwd -6 "1234")
-chroot rootdir usermod -p "$ROOT_HASH" root
-
 echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" > rootdir/etc/sudoers.d/wheel
-# ==========================================
 
+# 🎮 自动启动配置
 cat << 'EOF' > rootdir/home/luser/.xinitrc
-#!/bin/sh
 exec retroarch
 EOF
 chroot rootdir chown luser:luser /home/luser/.xinitrc
 
+# 🛠️ Runit 服务 (QRTR + NetworkManager)
 mkdir -p rootdir/etc/sv/qrtr-ns
 cat << 'EOF' > rootdir/etc/sv/qrtr-ns/run
 #!/bin/sh
-sleep 3
 [ -x /usr/bin/qrtr-ns ] && exec /usr/bin/qrtr-ns -f
 EOF
 chmod +x rootdir/etc/sv/qrtr-ns/run
+mkdir -p rootdir/etc/runit/runsvdir/default
+ln -sf /etc/sv/qrtr-ns rootdir/etc/runit/runsvdir/default/
+ln -sf /etc/sv/NetworkManager rootdir/etc/runit/runsvdir/default/
 
-ln -s /etc/sv/qrtr-ns rootdir/etc/runit/runsvdir/default/
-ln -s /etc/sv/dbus rootdir/etc/runit/runsvdir/default/
-ln -s /etc/sv/NetworkManager rootdir/etc/runit/runsvdir/default/
-
+# 🧹 清理收尾
 fuser -k -9 -m rootdir || true
 umount -l rootdir/dev/pts rootdir/dev rootdir/proc rootdir/sys rootdir
 tune2fs -U $FILESYSTEM_UUID "$ROOTFS_IMG"
 img2simg "$ROOTFS_IMG" "sparse_${ROOTFS_IMG}"
 7z a "void_retro_${TIMESTAMP}.7z" "sparse_${ROOTFS_IMG}"
-
-echo "🎉 构建完毕！"
