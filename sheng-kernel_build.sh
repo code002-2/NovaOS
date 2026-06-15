@@ -138,6 +138,5 @@ dpkg-deb --build --root-owner-group linux-xiaomi-sheng
 dpkg-deb --build --root-owner-group firmware-xiaomi-sheng
 dpkg-deb --build --root-owner-group alsa-xiaomi-sheng
 dpkg-deb --build --root-owner-group sheng-devauth
-dpkg-deb --build --root-owner-group sensor
 
 echo "🎉 所有任务圆满完成！恭喜！"
