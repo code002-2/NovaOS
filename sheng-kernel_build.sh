@@ -56,6 +56,16 @@ rm -f include/config/auto.conf.cmd
 # 我们生成一个包含 1000 个回车的输入流给它
 perl -e 'print "\n" x 1000' | make ARCH=arm64 oldconfig
 
+# ==========================================
+# ⚠️ 彻底爆破：物理删除该报错文件，永绝后患
+# ==========================================
+echo "🛠️ 正在物理移除冲突的设备树文件..."
+# 暴力查找并删除，确保它不在编译列表中
+rm -f arch/arm64/boot/dts/qcom/hamoa-iot-evk.dts
+rm -f arch/arm64/boot/dts/qcom/hamoa-iot-evk.dtb
+# 同时确保 Makefile 中没有它的引用
+sed -i '/hamoa-iot-evk/d' arch/arm64/boot/dts/qcom/Makefile || true
+
 # 再次运行一次，确保所有依赖更新完全生效
 make ARCH=arm64 olddefconfig
 
