@@ -51,7 +51,7 @@ echo "🔨 开始极速编译..."
 make ARCH=arm64 LLVM=1 prepare
 
 # 使用 --silent 静默编译，并只构建目标 Image 和 你的设备树
-make -j$(nproc) ARCH=arm64 LLVM=1 Image
+make ARCH=arm64 CC="ccache clang" LLVM=1 Image
 make -j$(nproc) ARCH=arm64 LLVM=1 arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb
 make -j$(nproc) ARCH=arm64 LLVM=1 modules
 
