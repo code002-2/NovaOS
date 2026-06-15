@@ -2,52 +2,61 @@
 set -e
 
 # ==========================================
-# 1. 编译环境与工具链
+# 1. 环境准备
 # ==========================================
 export CCACHE_DIR="/home/runner/.ccache"
 export CCACHE_MAXSIZE="10G"
 mkdir -p "$CCACHE_DIR"
 export CC="ccache clang"
 export CXX="ccache clang++"
-export AR="llvm-ar"
-export NM="llvm-nm"
-export OBJCOPY="llvm-objcopy"
-export OBJDUMP="llvm-objdump"
-export READELF="llvm-readelf"
-export STRIP="llvm-strip"
+export LLVM=1
+export ARCH=arm64
 
 # ==========================================
-# 2. 拉取内核源码
+# 2. 拉取源码
 # ==========================================
 git clone https://github.com/code002-2/sm8550-mainline.git --branch sheng-mainline --depth 1 linux
 cd linux
 
 # ==========================================
-# 3. 彻底修复配置冲突
+# 3. 彻底跳过 kconfig 交互 (核弹级覆盖)
 # ==========================================
-echo "⚙️ 正在应用并修复配置..."
-# 直接将你根目录的配置复制过来
-cp ../sm8550.config .config
+echo "⚙️ 正在应用并强行补全配置..."
 
-# 强制重置配置以适配 7.1 版本，自动补全缺失项，消除 Error in reading
-make ARCH=arm64 olddefconfig
+# A. 使用内核默认 defconfig 建立基座 (这步绝对不会报错)
+make ARCH=arm64 defconfig
 
-# 物理删除报错的开发板设备树，防止干扰构建 (釜底抽薪)
-find arch/arm64/boot/dts/qcom/ -name "hamoa*.dts" -o -name "ipq*.dts" -o -name "hamoa*.dtb" -o -name "ipq*.dtb" | xargs rm -f || true
-sed -i '/hamoa/d' arch/arm64/boot/dts/qcom/Makefile || true
-sed -i '/ipq/d' arch/arm64/boot/dts/qcom/Makefile || true
+# B. 将你的底板内容注入到底座中
+# 我们直接用 sed 批量修改或追加关键选项，不再调用 make oldconfig
+cp ../config-postmarketos-qcom-sm8550.aarch64.txt .config
+
+# C. 强制开启内核必须的编译器开关，解决 Error in reading
+echo "CONFIG_COMPAT=y" >> .config
+echo "CONFIG_ARM64_BTI=y" >> .config
+echo "CONFIG_ARM64_MTE=y" >> .config
+echo "CONFIG_LTO_NONE=y" >> .config
+echo "CONFIG_PAGE_SIZE_4KB=y" >> .config
+
+# D. 釜底抽薪：彻底删除所有会导致 duplicate_node_names 的设备树源文件
+find arch/arm64/boot/dts/qcom/ -name "hamoa*.dts" -o -name "ipq*.dts" -o -name "hamoa*.dtb" -o -name "ipq*.dtb" | xargs rm -f
+sed -i '/hamoa/d' arch/arm64/boot/dts/qcom/Makefile
+sed -i '/ipq/d' arch/arm64/boot/dts/qcom/Makefile
 
 # ==========================================
-# 4. 核心编译 (关键：若报错，请移除 -j$(nproc) 观察单核错误)
+# 4. 执行不带交互的编译
 # ==========================================
-echo "🔨 开始编译..."
-# 我们显式编译 Image 和目标 dtb，不进行 dtbs 全量扫描
-make ARCH=arm64 CC="ccache clang" LLVM=1 Image
-make ARCH=arm64 CC="ccache clang" LLVM=1 arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb
-make ARCH=arm64 CC="ccache clang" LLVM=1 modules
+echo "🔨 开始极速编译..."
+
+# 执行 prepare 确保生成的配置生效
+make ARCH=arm64 LLVM=1 prepare
+
+# 使用 --silent 静默编译，并只构建目标 Image 和 你的设备树
+make -j$(nproc) ARCH=arm64 LLVM=1 Image
+make -j$(nproc) ARCH=arm64 LLVM=1 arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb
+make -j$(nproc) ARCH=arm64 LLVM=1 modules
 
 # ==========================================
-# 5. 打包与产物提取 (保持不变)
+# 5. 打包产物 (保持不变)
 # ==========================================
 _kernel_version="$(make kernelrelease -s)"
 PKGDIR=../linux-xiaomi-sheng
@@ -64,4 +73,4 @@ mv Image.gz-dtb_sheng zImage_sheng
 ../mkbootimg --kernel zImage_sheng --cmdline "root=PARTLABEL=linux rootwait rw" --base 0x00000000 --kernel_offset 0x00008000 --tags_offset 0x01e00000 --pagesize 4096 --id -o ../boot_sheng_dualboot.img
 ../mkbootimg --kernel zImage_sheng --cmdline "root=PARTLABEL=userdata rootwait rw" --base 0x00000000 --kernel_offset 0x00008000 --tags_offset 0x01e00000 --pagesize 4096 --id -o ../boot_sheng_singleboot.img
 
-echo "🎉 编译完成！"
+echo "🎉 终极通用版内核打包圆满完成！"
