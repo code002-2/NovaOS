@@ -72,14 +72,14 @@ make ARCH=arm64 alldefconfig
 # 4. 执行不带交互的编译
 # ==========================================
 echo "🔨 开始极速编译..."
+# 编译 Image 镜像
+make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 Image
 
-# 执行 prepare 确保生成的配置生效
-make ARCH=arm64 LLVM=1 prepare
+# 编译指定的设备树 (只写相对路径)
+make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 qcom/sm8550-xiaomi-sheng.dtb
 
-# 使用 --silent 静默编译，并只构建目标 Image 和 你的设备树
-make ARCH=arm64 CC="ccache clang" LLVM=1 Image
-make -j$(nproc) ARCH=arm64 LLVM=1 arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb
-make -j$(nproc) ARCH=arm64 LLVM=1 modules
+# 编译模块
+make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 modules
 
 # ==========================================
 # 5. 打包产物 (保持不变)
