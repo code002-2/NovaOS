@@ -98,6 +98,16 @@ install -Dm644 arch/arm64/boot/Image.gz $PKGDIR/boot/Image.gz
 install -Dm644 arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb $PKGDIR/boot/sm8550-xiaomi-sheng.dtb
 install -Dm644 .config $PKGDIR/boot/config-${_kernel_version}
 
+# ==========================================
+# 📊 产物体检 (排查 4MB 原因)
+# ==========================================
+echo "📊 核心产物大小检查："
+ls -lh arch/arm64/boot/Image arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb
+echo "📊 模块数量检查："
+find . -name "*.ko" | wc -l
+echo "📊 .config 体积检查："
+ls -lh .config
+
 chmod +x ../mkbootimg
 cat arch/arm64/boot/Image.gz arch/arm64/boot/dts/qcom/sm8550-xiaomi-sheng.dtb > Image.gz-dtb_sheng
 mv Image.gz-dtb_sheng zImage_sheng
