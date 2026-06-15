@@ -43,6 +43,23 @@ sed -i '/hamoa/d' arch/arm64/boot/dts/qcom/Makefile
 sed -i '/ipq/d' arch/arm64/boot/dts/qcom/Makefile
 
 # ==========================================
+# 🛠️ 终极修复：清理冲突的 KVM 寄存器定义
+# ==========================================
+echo "🛠️ 正在修复 arch/arm64/kvm/sys_regs.c 重定义冲突..."
+
+# 使用 sed 强行删除重复定义的函数体
+# 这会将重复的 access_gicv5_* 和 sanitise_id_aa64pfr2_el1 等函数注释掉或删除
+sed -i '/static bool access_gicv5_idr0/,/}/d' arch/arm64/kvm/sys_regs.c
+sed -i '/static bool access_gicv5_iaffid/,/}/d' arch/arm64/kvm/sys_regs.c
+sed -i '/static bool access_gicv5_ppi_enabler/,/}/d' arch/arm64/kvm/sys_regs.c
+sed -i '/static u64 sanitise_id_aa64pfr2_el1/,/}/d' arch/arm64/kvm/sys_regs.c
+sed -i '/static int set_id_aa64pfr2_el1/,/}/d' arch/arm64/kvm/sys_regs.c
+
+# 既然报错了，说明 KVM 相关支持配置可能太杂，我们在 .config 中禁用掉不需要的 KVM 功能
+echo "# CONFIG_KVM_ARM_VGIC_V3 is not set" >> .config
+echo "# CONFIG_KVM_ARM_VGIC_V2 is not set" >> .config
+
+# ==========================================
 # 4. 执行不带交互的编译
 # ==========================================
 echo "🔨 开始极速编译..."
