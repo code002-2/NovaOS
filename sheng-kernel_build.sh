@@ -119,16 +119,25 @@ mv Image.gz-dtb_sheng zImage_sheng
 ../mkbootimg --kernel zImage_sheng --cmdline "root=PARTLABEL=linux rootwait rw" --base 0x00000000 --kernel_offset 0x00008000 --tags_offset 0x01e00000 --pagesize 4096 --id -o ../boot_sheng_dualboot.img
 ../mkbootimg --kernel zImage_sheng --cmdline "root=PARTLABEL=userdata rootwait rw" --base 0x00000000 --kernel_offset 0x00008000 --tags_offset 0x01e00000 --pagesize 4096 --id -o ../boot_sheng_singleboot.img
 
-# ==========================================
-# 8. 构建 DEB 包
-# ==========================================
-# 退出 linux 源码目录，回到根目录
 cd ..
 
-echo "📦 开始打包所有 deb 文件..."
+echo "🔧 正在进行 UsrMerge 路径手术 (确保 Arch/Fedora 兼容性)..."
+
+# 对所有可能包含 /lib 目录的包进行自动化修正
+for pkg in firmware-xiaomi-sheng alsa-xiaomi-sheng sensor; do
+    if [ -d "$pkg/lib" ]; then
+        echo "✅ 正在将 $pkg 中的 /lib 迁移至 /usr/lib"
+        mkdir -p "$pkg/usr"
+        mv "$pkg/lib" "$pkg/usr/"
+    fi
+done
+
+echo "📦 开始打包现代化结构的 deb 文件..."
+# 确保所有包按照统一结构打包
 dpkg-deb --build --root-owner-group linux-xiaomi-sheng
 dpkg-deb --build --root-owner-group firmware-xiaomi-sheng
 dpkg-deb --build --root-owner-group alsa-xiaomi-sheng
 dpkg-deb --build --root-owner-group sheng-devauth
+dpkg-deb --build --root-owner-group sensor
 
 echo "🎉 所有任务圆满完成！恭喜！"
