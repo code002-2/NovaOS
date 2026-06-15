@@ -43,14 +43,13 @@ sed -i '/hamoa/d' arch/arm64/boot/dts/qcom/Makefile
 sed -i '/ipq/d' arch/arm64/boot/dts/qcom/Makefile
 
 # ==========================================
-# 🛠️ 终极止血：彻底禁用 KVM，避开架构冲突
+# 🛠️ 终极止血：将 KVM 变成一个“空壳”
 # ==========================================
-echo "⚙️ 正在应用配置并彻底禁用 KVM..."
+echo "⚙️ 正在应用配置并屏蔽 KVM 编译..."
 
-# 1. 注入配置，确保 KVM 和相关 GIC 虚拟化全部关闭
-cp ../config-postmarketos-qcom-sm8550.aarch64 .config
+cp ../config-postmarketos-qcom-sm8550.aarch64.txt .config
 
-# 强制禁用 KVM 及其相关所有组件
+# 1. 禁用 KVM 配置，确保 Makefile 不会尝试去编译那些会导致重定义的文件
 {
     echo "# CONFIG_KVM is not set"
     echo "# CONFIG_KVM_ARM_VGIC_V3 is not set"
@@ -58,11 +57,16 @@ cp ../config-postmarketos-qcom-sm8550.aarch64 .config
     echo "# CONFIG_ARM64_VIRT is not set"
 } >> .config
 
-# 2. 重新进行最小化配置更新
-make ARCH=arm64 alldefconfig
+# 2. 关键修复：不要删除 kvm 目录，而是清空它！
+# 这样 make 还能找到 Kconfig 文件，但里面的代码全是空的，不会触发任何报错
+find arch/arm64/kvm/ -name "*.c" -type f -delete
+find arch/arm64/kvm/ -name "*.h" -type f -delete
 
-# 3. 物理删除所有会导致冲突的内核文件 (KVM 相关的都删掉)
-rm -rf arch/arm64/kvm/
+# 3. 如果 KVM 目录下还有 Makefile，清空它，让它什么都不编译
+echo "obj- := empty.o" > arch/arm64/kvm/Makefile
+
+# 4. 执行 alldefconfig 更新依赖
+make ARCH=arm64 alldefconfig
 
 # ==========================================
 # 4. 执行不带交互的编译
