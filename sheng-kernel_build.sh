@@ -43,6 +43,13 @@ sed -i 's/=m/=y/g' .config
     echo "CONFIG_USB_DWC3_QCOM=y"
     echo "CONFIG_PHY_QCOM_QMP_USB=y"
     echo "CONFIG_PHY_QCOM_SNPS_EUSB2=y"
+
+    echo "# CONFIG_WLAN_VENDOR_INTEL is not set"
+    echo "# CONFIG_IWLWIFI is not set"
+    echo "# CONFIG_WLAN_VENDOR_REALTEK is not set"
+    echo "# CONFIG_WLAN_VENDOR_MEDIATEK is not set"
+    echo "# CONFIG_WLAN_VENDOR_BROADCOM is not set"
+    echo "# CONFIG_WLAN_VENDOR_RALINK is not set"
     
     # 彻底禁用 KVM 虚拟化，避开 sys_regs.c 的函数重定义报错
     echo "# CONFIG_KVM is not set"
