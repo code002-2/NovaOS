@@ -72,14 +72,19 @@ make ARCH=arm64 alldefconfig
 # 4. 执行不带交互的编译
 # ==========================================
 echo "🔨 开始极速编译..."
-# 编译 Image 镜像
-make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 Image
+echo "🔨 开始极速编译..."
 
-# 编译指定的设备树 (只写相对路径)
+# 编译内核镜像
+make ARCH=arm64 LLVM=1 Image
+
+# 强制生成 Image.gz (压缩一份，以备打包脚本使用)
+gzip -c arch/arm64/boot/Image > arch/arm64/boot/Image.gz
+
+# 强制编译设备树 (使用之前添加的 -f 参数)
 make ARCH=arm64 LLVM=1 DTC_FLAGS="-f" qcom/sm8550-xiaomi-sheng.dtb
 
 # 编译模块
-make -j$(nproc) ARCH=arm64 CC="ccache clang" LLVM=1 modules
+make -j$(nproc) ARCH=arm64 LLVM=1 modules
 
 # ==========================================
 # 5. 打包产物 (保持不变)
