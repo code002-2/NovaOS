@@ -19,72 +19,13 @@ echo "📥 正在拉取内核源码..."
 git clone https://github.com/code002-2/sm8550-mainline.git --branch sheng-mainline --depth 1 linux
 cd linux
 
-# ==========================================
-# 3. 智能配置注入 (底座 + 高通专有补丁合并)
-# ==========================================
-echo "⚙️ 正在应用自动生成的底座配置..."
+echo "⚙️ 正在应用配置..."
 
 # 1. 复制干净底座
 cp ../sm8550.config .config
 
-# 2. 精准提取高通、小米等专属驱动
-echo "🔍 正在从 postmarketos 提取专有配置..."
-grep -E '^CONFIG_.*(QCOM|MSM|SM8550|XIAOMI|ADRENO)=' ../config-postmarketos-qcom-sm8550.aarch64.txt > qcom_extras.config || true
 
-# 3. 强制内置核心驱动
-sed -i 's/=m/=y/g' qcom_extras.config
-
-# 4. 合并补丁
-cat qcom_extras.config >> .config
-
-# 5. 硬编码保底驱动与冲突屏蔽
-{
-    echo "# ---- 核心亮机保底驱动 (防止跨版本丢失) ----"
-    echo "CONFIG_SCSI_UFS_QCOM=y"
-    echo "CONFIG_PHY_QCOM_QMP_UFS=y"
-    echo "CONFIG_DRM_MSM=y"
-    echo "CONFIG_DRM_MSM_DPU=y"
-    echo "CONFIG_DRM_PANEL_XIAOMI_SHENG=y"
-    echo "CONFIG_QCOM_SPMI_PMIC=y"
-    echo "CONFIG_USB_DWC3_QCOM=y"
-    
-    echo "# ---- 屏蔽冲突项 (KVM 与 第三方网卡) ----"
-    echo "# CONFIG_KVM is not set"
-    echo "# CONFIG_KVM_ARM_VGIC_V3 is not set"
-    echo "# CONFIG_KVM_ARM_VGIC_V2 is not set"
-    echo "# CONFIG_ARM64_VIRT is not set"
-    echo "# CONFIG_WLAN_VENDOR_INTEL is not set"
-    echo "# CONFIG_IWLWIFI is not set"
-    echo "# CONFIG_WLAN_VENDOR_REALTEK is not set"
-    echo "# CONFIG_WLAN_VENDOR_MEDIATEK is not set"
-    echo "# CONFIG_WLAN_VENDOR_BROADCOM is not set"
-
-    echo "# ---- 极致提速：干掉 LTO 与 调试符号 ----"
-    echo "# CONFIG_LTO_CLANG_FULL is not set"
-    echo "# CONFIG_LTO_CLANG_THIN is not set"
-    echo "CONFIG_LTO_NONE=y"
-    echo "# CONFIG_DEBUG_INFO is not set"
-    echo "# CONFIG_DEBUG_INFO_BTF is not set"
-    echo "# CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT is not set"
-    echo "CONFIG_DEBUG_INFO_NONE=y"
-} >> .config
-
-# 6. 安全融合并补全依赖
-echo "🔄 正在自动融合配置..."
-make ARCH=arm64 olddefconfig
-
-# ==========================================
-# 4. 彻底清空 KVM 冲突源
-# ==========================================
-echo "🧹 正在清理 KVM 冲突文件..."
-find arch/arm64/kvm/ -name "*.c" -type f -delete
-find arch/arm64/kvm/ -name "*.h" -type f -delete
-echo "obj- := empty.o" > arch/arm64/kvm/Makefile
-
-# ==========================================
-# 5. 执行强制编译
-# ==========================================
-echo "🔨 开始极速编译..."
+echo "🔨 开始编译..."
 
 # 编译核心 Image
 make -j$(nproc) ARCH=arm64 LLVM=1 Image
@@ -152,8 +93,6 @@ else
 fi
 rm -rf /tmp/temp_fw
 
-echo "📥 正在从 map220v 仓库拉取专用的 ALSA UCM2 音频配置文件..."
-# 创建符合现代 Linux 规范的系统级 ALSA 配置目录
 mkdir -p alsa-xiaomi-sheng/usr/share/alsa/ucm2
 git clone --depth 1 https://github.com/map220v/alsa-ucm-conf.git /tmp/temp_alsa
 
