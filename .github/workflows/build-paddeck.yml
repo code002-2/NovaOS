@@ -1,4 +1,4 @@
-name: Build Fedora 44 Desktop
+name: Build PadDeck OS
 
 on:
   workflow_dispatch:
@@ -6,19 +6,13 @@ on:
       kernel_version:
         description: '内核版本'
         required: true
-        default: '7.0'
+        default: '7.1'
       kernel_channel:
         description: '内核通道'
         required: true
         type: choice
         options: [mainline, stable]
         default: 'mainline'
-      desktop_env:
-        description: '桌面环境'
-        required: true
-        type: choice
-        options: [all, gnome, kde]
-        default: 'all'
       skip_release:
         description: '跳过创建GitHub Release'
         type: boolean
@@ -26,9 +20,9 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'sheng-fedora-rootfs_build.sh'
+      - 'paddeck-rootfs_build.sh'
       - 'lib/rootfs-common.sh'
-      - '.github/workflows/build-fedora44.yml'
+      - '.github/workflows/build-paddeck.yml'
       - '.github/workflows/_rootfs-template.yml'
 
 permissions:
@@ -38,12 +32,12 @@ jobs:
   build:
     uses: ./.github/workflows/_rootfs-template.yml
     with:
-      distro: fedora
-      script: sheng-fedora-rootfs_build.sh
-      kernel_version_default: '7.0'
+      distro: paddeck
+      script: padeck-rootfs_build.sh
+      kernel_version_default: '7.1'
       kernel_channel_default: 'mainline'
       desktop_matrix: '["all"]'
-      release_tag_prefix: fedora44
-      release_body_title: "Fedora 44 Desktop"
+      release_tag_prefix: paddeck
+      release_body_title: "PadDeck OS (Steam Gaming)"
       skip_release: ${{ github.event.inputs.skip_release }}
     secrets: inherit

@@ -41,7 +41,7 @@
 | Debian 13 (Trixie) | `sheng-rootfs_build.sh` | GNOME, KDE | 稳定 |
 | Ubuntu 26.04 | `build-ubuntu26-rootfs.sh` | GNOME, KDE, XFCE | 测试 |
 | Arch Linux ARM | `sheng-arch-rootfs_build.sh` | GNOME, KDE | 测试 |
-| Fedora 44 | `sheng-fedora-rootfs_build.sh` | GNOME | 实验 |
+| Fedora 44 | `sheng-fedora-rootfs_build.sh` | GNOME, KDE | 实验 |
 | Kali Linux | `sheng-kali-rootfs_build.sh` | GNOME, KDE | 实验 |
 | Deepin 25.1 | `deepin-rootfs_build.sh` | Deepin DE | 实验 |
 | PadDeck OS | `paddeck-rootfs_build.sh` | Sway (Steam) | 实验 |
@@ -111,13 +111,29 @@ sudo bash sheng-rootfs_build.sh debian-desktop 7.1 dual gnome
 
 ### 构建内核
 
+内核支持 **Mainline**（主线）和 **Stable**（稳定）两个通道：
+
 ```bash
-# Mainline 通道
+# Mainline 通道 (默认)
 bash sheng-kernel_build.sh
 
 # Stable 通道
-KERNEL_REPO=ianchb/sm8550-mainline KERNEL_BRANCH=sheng-7.0.12 bash sheng-kernel_build.sh
+KERNEL_CHANNEL=stable bash sheng-kernel_build.sh
 ```
+
+### 指定内核通道构建 rootfs
+
+rootfs 构建时会自动从对应通道的内核 Release 中下载 `.deb` 驱动包：
+
+```bash
+# 使用 mainline 内核 (默认)
+sudo bash sheng-rootfs_build.sh debian-desktop 7.1 all all
+
+# 使用 stable 内核
+KERNEL_CHANNEL=stable sudo bash sheng-rootfs_build.sh debian-desktop 7.1 all all
+```
+
+在 CI 中，每个工作流都有 `kernel_channel` 输入项可选 mainline 或 stable。
 
 ---
 
