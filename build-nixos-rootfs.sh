@@ -125,7 +125,7 @@ for MODE in "${BOOT_MODES[@]}"; do
 
     if [ "$IMAGE_SIZE" != "auto" ]; then
         echo "  Resizing to ${IMAGE_SIZE}"
-        e2fsck -fy "$OUT_DIR/$ROOTFS_IMG" 2>/dev/null || true
+        e2fsck -fn "$OUT_DIR/$ROOTFS_IMG" || true
         CURRENT_SIZE="$(stat -c%s "$OUT_DIR/$ROOTFS_IMG")"
         DESIRED_SIZE="$(numfmt --from=iec "$IMAGE_SIZE")"
         if [ "$DESIRED_SIZE" -lt "$CURRENT_SIZE" ]; then
