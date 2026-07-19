@@ -54,7 +54,7 @@
         echo "ERROR: seatd is not running" >&2
         echo "  status: $(systemctl is-active seatd 2>&1)" >&2
       else
-        exec niri-session
+        exec niri --session
       fi
     fi
   '';
