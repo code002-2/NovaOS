@@ -7,11 +7,11 @@
 { config, lib, pkgs, vars, ... }:
 
 let
-  nyxNiriWallpapers = pkgs.fetchzip {
-    name = "nyx-niri-wallpapers";
-    url = "https://github.com/ech678/NyxNiri/archive/refs/heads/main.tar.gz";
-    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-    stripRoot = false;
+  nyxNiriWallpapers = builtins.fetchTree {
+    type = "github";
+    owner = "ech678";
+    repo = "NyxNiri";
+    rev = "79894f443f5b21bb16077f628a35d9c47301b15d";
   };
 
   wallpaperSwitch = pkgs.writeShellScriptBin "wallpaper-switch" ''
@@ -497,7 +497,7 @@ in
   '';
 
   # NyxNiri wallpapers from upstream repo
-  environment.etc."wallpapers".source = "${nyxNiriWallpapers}/NyxNiri-main/Wallpapers";
+  environment.etc."wallpapers".source = "${nyxNiriWallpapers}/Wallpapers";
 
   environment.etc."xdg/waybar/config".text = builtins.toJSON {
     layer = "top";
