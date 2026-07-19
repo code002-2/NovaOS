@@ -23,10 +23,55 @@
   environment.systemPackages = with pkgs; [
     niri
     foot
+    kitty
     fuzzel
     wvkbd
     waybar
+    mpvpaper
+    fastfetch
+    eza
+    fzf
+    fd
+    bat
+    jq
+    inotify-tools
   ];
+
+  fonts.packages = with pkgs; [
+    jetbrains-mono
+    nerd-fonts.jetbrains-mono
+    noto-fonts-cjk-sans
+  ];
+
+  programs.fish.enable = true;
+  programs.starship = {
+    enable = true;
+    settings = {
+      format = "$all";
+      character = {
+        success_symbol = "[λ](bold green)";
+        error_symbol = "[λ](bold red)";
+      };
+      directory = {
+        truncation_length = 3;
+        truncate_to_repo = false;
+      };
+      git_branch = {
+        format = "[$symbol$branch]($style) ";
+        symbol = "";
+        style = "bold purple";
+      };
+      git_status = {
+        format = "([$all_status$ahead_behind]($style)) ";
+        style = "bold yellow";
+      };
+      cmd_duration = {
+        format = "[$duration]($style) ";
+        min_time = 2000;
+        style = "bold yellow";
+      };
+    };
+  };
 
   # Auto-start niri on the autologin tty (getty tty1)
   programs.bash.loginShellInit = ''
@@ -61,7 +106,7 @@
   '';
 
   environment.etc."xdg/niri/config.kdl".text = ''
-    spawn-at-startup "foot"
+    spawn-at-startup "kitty"
     spawn-at-startup "wvkbd-mobintl"
     spawn-at-startup "waybar"
 
@@ -233,8 +278,8 @@
 
     binds {
         Mod+Tab repeat=false { toggle-overview; }
-        Mod+Return           { spawn "foot"; }
-        Mod+T                { spawn "foot"; }
+        Mod+Return           { spawn "kitty"; }
+        Mod+T                { spawn "kitty"; }
         Mod+D                { spawn "fuzzel"; }
         Mod+Q                { close-window; }
         Mod+Shift+E          { quit; }
@@ -400,7 +445,7 @@
   environment.etc."xdg/fuzzel/fuzzel.ini".text = ''
     [main]
     font=monospace:size=14
-    terminal=foot
+    terminal=kitty
     prompt=
 
     width=40
@@ -423,5 +468,95 @@
     selection-text=cdd6f4ff
     selection-match=89b4faff
     border=0078d4ff
+  '';
+
+  programs.bash.interactiveShellInit = ''
+    if command -v fish > /dev/null 2>&1; then
+      exec fish
+    fi
+  '';
+
+  environment.etc."xdg/kitty/kitty.conf".text = ''
+    # Catppuccin Mocha theme for Kitty
+    font_family JetBrainsMono Nerd Font Mono
+    font_size 12.0
+    bold_font auto
+    italic_font auto
+    bold_italic_font auto
+    cursor_trail 3
+    cursor_trail_start_threshold 1
+    cursor_trail_decay 0.1
+    disable_ligatures never
+    background_opacity 0.95
+    dynamic_background_opacity yes
+    confirm_os_window_close 0
+    hide_window_decorations yes
+    window_padding_width 8
+
+    # Catppuccin Mocha colors
+    foreground #cdd6f4
+    background #1e1e2e
+    selection_foreground #1e1e2e
+    selection_background #f5e0dc
+    url_color #f5c2e7
+    cursor #f5e0dc
+    active_border_color #b4befe
+    inactive_border_color #6c7086
+    active_tab_foreground #11111b
+    active_tab_background #cba6f7
+    inactive_tab_foreground #cdd6f4
+    inactive_tab_background #181825
+    tab_bar_background #11111b
+    color0 #45475a
+    color1 #f38ba8
+    color2 #a6e3a1
+    color3 #f9e2af
+    color4 #89b4fa
+    color5 #f5c2e7
+    color6 #94e2d5
+    color7 #bac2de
+    color8 #585b70
+    color9 #f38ba8
+    color10 #a6e3a1
+    color11 #f9e2af
+    color12 #89b4fa
+    color13 #f5c2e7
+    color14 #94e2d5
+    color15 #a6adc8
+
+    # NyxNiri-style keybindings
+    map ctrl+c copy_or_interrupt
+    map ctrl+v paste_from_clipboard
+    map ctrl+backspace send_text all \x17
+    map ctrl+delete send_text all \x1b\x64
+    map ctrl+a send_text all \x01
+  '';
+
+  environment.etc."xdg/fastfetch/config.jsonc".text = ''
+    {
+      "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+      "modules": [
+        "title",
+        "separator",
+        "os",
+        "host",
+        "kernel",
+        "uptime",
+        "packages",
+        "shell",
+        "display",
+        "wm",
+        "terminal",
+        "cpu",
+        "gpu",
+        "memory",
+        "break",
+        "colors"
+      ],
+      "display": {
+        "separator": " → "
+      },
+      "logo": { "type": "small" }
+    }
   '';
 }
