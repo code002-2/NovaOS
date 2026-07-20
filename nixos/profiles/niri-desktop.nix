@@ -227,13 +227,43 @@ in
       echo "--- kernel modules (hid/usb) ---" >> /tmp/niri-diag/devices.log
       lsmod | grep -iE "hid|usb" >> /tmp/niri-diag/devices.log 2>&1
 
-      if ! ls /dev/dri/card* >/dev/null 2>&1; then
-        echo "ERROR: No DRM device found at /dev/dri/" >&2
-      elif ! systemctl is-active --quiet seatd 2>/dev/null; then
-        echo "ERROR: seatd is not running" >&2
-        echo "  status: $(systemctl is-active seatd 2>&1)" >&2
-      else
+      # Wait for DRM devices to appear (can take a moment after boot)
+      DRM_READY=false
+      for i in $(seq 1 10); do
+        if ls /dev/dri/card* >/dev/null 2>&1; then
+          DRM_READY=true
+          break
+        fi
+        echo "Waiting for /dev/dri/card* (attempt $i/10)..." >> /tmp/niri-diag/devices.log
+        sleep 0.5
+      done
+
+      if ! $DRM_READY; then
+        echo "ERROR: No DRM device found at /dev/dri/ after 10 attempts" >&2
+        echo "ERROR: No DRM device after 10 attempts" >> /tmp/niri-diag/devices.log
+      fi
+
+      # Wait for seatd
+      SEATD_READY=false
+      for i in $(seq 1 10); do
+        if systemctl is-active --quiet seatd 2>/dev/null; then
+          SEATD_READY=true
+          break
+        fi
+        echo "Waiting for seatd (attempt $i/10)..." >> /tmp/niri-diag/devices.log
+        sleep 0.5
+      done
+
+      if ! $SEATD_READY; then
+        echo "ERROR: seatd is not running after 10 attempts" >&2
+        echo "ERROR: seatd not running after 10 attempts" >> /tmp/niri-diag/devices.log
+        echo "  systemctl status: $(systemctl is-active seatd 2>&1 || true)" >> /tmp/niri-diag/devices.log
+      fi
+
+      if $DRM_READY && $SEATD_READY; then
         exec niri --session 2>> /tmp/niri-diag/niri-stderr.log
+      else
+        echo "Falling back to shell. Run 'niri --session' to start manually." >&2
       fi
     fi
   '';
