@@ -205,13 +205,6 @@ in
   # logind manages DRM/input device access (compatible with niri --session)
   security.polkit.enable = true;
 
-  # Allow user session to manage DRM and input devices via logind
-  services.logind.extraConfig = ''
-    HandlePowerKey=ignore
-    IdleAction=ignore
-  '';
-  users.users.${vars.username}.extraGroups = [ "video" "input" "render" ];
-
   # Auto-login on tty1 so bash loginShellInit can exec niri
   services.getty.autologinUser = lib.mkForce vars.username;
 
