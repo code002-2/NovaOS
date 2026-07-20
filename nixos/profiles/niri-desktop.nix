@@ -133,7 +133,13 @@ in
 
 {
   programs.niri.enable = true;
-  hardware.graphics.enable = true;
+  hardware.graphics = {
+    enable = true;
+    # Qualcomm Adreno 740 — ensure freedreno (GL) + turnip (VK) are included
+    extraPackages = with pkgs; [
+      mesa.drivers
+    ];
+  };
 
   # kmscon conflicts with the compositor owning the display
   services.kmscon.enable = lib.mkForce false;
