@@ -206,6 +206,12 @@ in
   services.seatd.enable = true;
   security.polkit.enable = true;
 
+  # Ensure getty@tty1 starts AFTER seatd so DRM/input devices are ready
+  systemd.services."getty@tty1" = {
+    after = [ "seatd.service" ];
+    requires = [ "seatd.service" ];
+  };
+
   # Auto-login on tty1 so bash loginShellInit can exec niri
   services.getty.autologinUser = lib.mkForce vars.username;
 
@@ -293,13 +299,13 @@ in
 
       # Wait for DRM devices to appear (can take a moment after boot)
       DRM_READY=false
-      for i in $(seq 1 10); do
+      for i in $(seq 1 30); do
         if ls /dev/dri/card* >/dev/null 2>&1; then
           DRM_READY=true
           break
         fi
-        echo "Waiting for /dev/dri/card* (attempt $i/10)..." >> /tmp/niri-diag/devices.log
-        sleep 0.5
+        echo "Waiting for /dev/dri/card* (attempt $i/30)..." >> /tmp/niri-diag/devices.log
+        sleep 1
       done
 
       if ! $DRM_READY; then
@@ -555,6 +561,7 @@ in
 
   system.activationScripts.niriSetup = ''
     mkdir -p /home/${vars.username}/.config/niri /home/${vars.username}/.config/noctalia
+    ln -sf /etc/xdg/niri/config.kdl /home/${vars.username}/.config/niri/config.kdl
     chown ${vars.username}:users /home/${vars.username}/.config
     chown -R ${vars.username}:users /home/${vars.username}/.config/niri /home/${vars.username}/.config/noctalia
   '';

@@ -80,13 +80,12 @@
     keyMap = "us";
   };
 
-  services.kmscon = {
-    enable = true;
-    config = {
-      hwaccel = false;
-      "font-size" = 18;
-    };
-  };
+  # kmscon is disabled — niri compositor manages the display directly via DRM
+  # console = {
+  #   earlySetup = true;
+  #   font = "Lat2-Terminus16";
+  #   keyMap = "us";
+  # };
 
   environment.systemPackages = let
     sheng-check = pkgs.writeShellScriptBin "sheng-check" (
