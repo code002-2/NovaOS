@@ -21,11 +21,11 @@ mobile-nixos.kernel-builder-clang {
   configfile = ./config.aarch64;
   patches = [
     ./0001-disable-dp0-sheng.patch
-    # 0002/0003 conflict with sheng-7.1.3 (debug-only, upstreamed)
+    # 0002/0003 conflict with sheng-7.1.4 (debug-only, upstreamed)
     # ./0002-ucsi-glink-debug-retry.patch
     # ./0003-pdr-pd-mapper-debug.patch
     ./0004-pdr-add-sheng-sensor-pd-lookup.patch
-    # b6c3859 patch is already applied in sheng-7.1.3 — skip it
+    # b6c3859 patch is already applied in sheng-7.1.4 — skip it
   ];
 
   isModular = true;

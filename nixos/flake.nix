@@ -18,7 +18,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     shengKernelSrc = {
-      url = "github:ianchb/sm8550-mainline/sheng-7.1.3";
+      url = "github:ianchb/sm8550-mainline/sheng-7.1.4";
       flake = false;
     };
     shengFirmware = {
