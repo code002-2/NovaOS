@@ -77,9 +77,9 @@ jobs:
       - name: Enable Nix cache
         uses: DeterminateSystems/magic-nix-cache-action@v13
 
-      - name: Update kernel source lock
+      - name: Update flake lock
         run: |
-          nix flake lock --update-input shengKernelSrc
+          nix flake lock --update-input shengKernelSrc --update-input shengFirmware --update-input shengFingerprint --update-input shengThp --update-input shengPenStatus
         working-directory: nixos
 
       - name: Validate stage-2 configuration

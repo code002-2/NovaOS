@@ -22,15 +22,27 @@
       flake = false;
     };
     shengFirmware = {
-      url = "github:DotRedstone/sheng-firmware-full/719086ce25222dcc54920ae12409eb5d4401bbff";
+      url = "github:code002-2/sheng-firmware";
+    };
+    shengFingerprint = {
+      url = "github:ianchb/xiaomi-sheng-fingerprint";
+      flake = false;
+    };
+    shengThp = {
+      url = "github:ianchb/xiaomi-sheng-thp";
+      flake = false;
+    };
+    shengPenStatus = {
+      url = "github:ianchb/xiaomi-pen-status";
+      flake = false;
     };
   };
 
-  outputs = { self, mobile-nixos, nixpkgs, home-manager, shengKernelSrc, shengFirmware }:
+  outputs = { self, mobile-nixos, nixpkgs, home-manager, shengKernelSrc, shengFirmware, shengFingerprint, shengThp, shengPenStatus }:
     let
       system = "aarch64-linux";
       shengOverlay = final: prev: {
-        inherit shengKernelSrc;
+        inherit shengKernelSrc shengFingerprint shengThp shengPenStatus;
         sheng-firmware = shengFirmware.packages.${prev.system}.default;
         libinput = prev.libinput.override {
           luaSupport = false;

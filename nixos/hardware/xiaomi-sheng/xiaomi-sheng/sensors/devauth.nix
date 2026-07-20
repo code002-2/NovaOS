@@ -17,7 +17,7 @@ stdenv.mkDerivation {
   version = "1.0.0";
 
   src = fetchurl {
-    url = "https://raw.githubusercontent.com/DotRedstone/sheng-firmware-full/main/bin/xiaomi_devauth";
+    url = "https://raw.githubusercontent.com/code002-2/sheng-firmware/main/bin/xiaomi_devauth";
     sha256 = "b814988c0aaef534121a8234796e85118fa07259479eb2f3fae72a953d91752f";
   };
 

@@ -12,6 +12,7 @@ in
 {
   imports = [
     ./sensors
+    ./packages
   ];
 
   options.mobile.hardware.socs."qualcomm-sm8550".enable = lib.mkOption {
@@ -44,6 +45,12 @@ in
         package = pkgs.callPackage ./kernel { };
         modular = true;
         allowMissingModules = true;
+      };
+
+      hardware.xiaomi-sheng = {
+        fingerprint.enable = true;
+        thp.enable = true;
+        pen-status.enable = true;
       };
 
       mobile.system.type = "android";
