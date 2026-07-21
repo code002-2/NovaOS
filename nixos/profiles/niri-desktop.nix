@@ -350,7 +350,7 @@ in
     }
 
     layout {
-        background-color "transparent"
+        background-color "#00000000"
         gaps 12
         center-focused-column "never"
         preset-column-widths {
@@ -359,7 +359,7 @@ in
             proportion 0.66667
         }
         default-column-width { proportion 0.5; }
-        focus-ring { off; width 0; }
+        focus-ring { off; }
         shadow { on; softness 10; spread 4; offset x=0 y=0; color "#00000070"; }
         tab-indicator { active-color "#60cdff"; inactive-color "#3b3b3b"; }
         insert-hint { color "#0078d480"; }
