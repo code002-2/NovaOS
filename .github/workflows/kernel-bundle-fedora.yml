@@ -67,6 +67,7 @@ jobs:
           done
 
           mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          mv linux-xiaomi-sheng rpmbuild/BUILD/
           cp rpm/linux-xiaomi-sheng.spec rpmbuild/SPECS/
           sed -i "s/%{kernel_version}/${KERNEL_VER}/" rpmbuild/SPECS/linux-xiaomi-sheng.spec
 
