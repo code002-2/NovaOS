@@ -718,3 +718,103 @@ build_sheng_bootimg() {
     rm -rf "$tmpdir"
     return "$rc"
 }
+
+# ---------------------------------------------------------------------------
+# extract_oci_rootfs  — 从 OCI 容器 tar 提取根文件系统
+#   参数: <oci_tar_path> <target_dir>
+#   支持: 单层和多层 OCI 镜像 (application/vnd.oci.image.layer.v1.tar+gzip)
+# ---------------------------------------------------------------------------
+extract_oci_rootfs() {
+    local oci_tar="$1" target="$2"
+
+    if [ ! -f "$oci_tar" ]; then
+        echo "错误: OCI tar 文件 '$oci_tar' 不存在" >&2
+        return 1
+    fi
+
+    local extract_dir
+    extract_dir=$(mktemp -d)
+
+    tar -xf "$oci_tar" -C "$extract_dir"
+
+    if [ ! -f "$extract_dir/index.json" ]; then
+        echo "错误: 无效的 OCI 镜像 (缺少 index.json)" >&2
+        rm -rf "$extract_dir"
+        return 1
+    fi
+
+    # 解析 manifest digest
+    local manifest_digest
+    manifest_digest=$(python3 -c "
+import json, sys
+idx = json.load(open('$extract_dir/index.json'))
+for m in idx.get('manifests', []):
+    d = m['digest']
+    if d.startswith('sha256:'):
+        blob = d.replace('sha256:', '')
+        print(blob)
+        sys.exit(0)
+print('', file=sys.stderr)
+sys.exit(1)
+" 2>/dev/null)
+
+    if [ -z "$manifest_digest" ]; then
+        echo "警告: 无法解析 manifest，尝试直接查找 blob 文件..."
+        # Fallback: find and extract all gzip blobs
+        local blob_files
+        blob_files=$(find "$extract_dir/blobs" -type f 2>/dev/null | sort)
+        local found=0
+        for blob in $blob_files; do
+            local magic
+            magic=$(head -c 2 "$blob" 2>/dev/null | od -A n -t x1 | tr -d ' ')
+            if [ "$magic" = "1f8b" ]; then
+                echo "  提取 blob: $(basename "$blob")"
+                zcat "$blob" | tar -x --keep-directory-symlink -C "$target/" 2>/dev/null
+                found=1
+            fi
+        done
+        rm -rf "$extract_dir"
+        if [ "$found" -eq 0 ]; then
+            echo "错误: 未找到任何 OCI 层" >&2
+            return 1
+        fi
+        return 0
+    fi
+
+    # 解析 manifest 获取 layer digests
+    local manifest_file="$extract_dir/blobs/sha256/${manifest_digest}"
+    if [ ! -f "$manifest_file" ]; then
+        echo "错误: manifest blob 不存在: $manifest_file" >&2
+        rm -rf "$extract_dir"
+        return 1
+    fi
+
+    local layers
+    layers=$(python3 -c "
+import json
+m = json.load(open('$manifest_file'))
+for layer in m.get('layers', []):
+    d = layer['digest']
+    if d.startswith('sha256:'):
+        print(d.replace('sha256:', ''))
+" 2>/dev/null)
+
+    if [ -z "$layers" ]; then
+        echo "错误: 未找到 OCI 层" >&2
+        rm -rf "$extract_dir"
+        return 1
+    fi
+
+    for digest in $layers; do
+        local layer_blob="$extract_dir/blobs/sha256/${digest}"
+        if [ ! -f "$layer_blob" ]; then
+            echo "错误: layer blob 不存在: ${digest}" >&2
+            rm -rf "$extract_dir"
+            return 1
+        fi
+        echo "  提取层: ${digest:0:12}..."
+        zcat "$layer_blob" | tar -x --keep-directory-symlink -C "$target/" 2>/dev/null
+    done
+
+    rm -rf "$extract_dir"
+}

@@ -65,29 +65,10 @@ for DE in "${DESKTOPS[@]}"; do
             }
         fi
 
-        # Decompress xz
         echo "解压 OCI 镜像..."
-        xz -dk "$OCI_TAR_XZ"
+        xz -dkf "$OCI_TAR_XZ"
 
-        # Extract OCI tar to get layer files
-        echo "提取 OCI 层..."
-        OCI_EXTRACT_DIR=$(mktemp -d)
-        tar -xf "$OCI_TAR" -C "$OCI_EXTRACT_DIR"
-
-        # Find all layer tars and extract them in order
-        LAYER_FILES=$(find "$OCI_EXTRACT_DIR" -name "*.tar" -type f | sort)
-        if [ -z "$LAYER_FILES" ]; then
-            echo "错误: OCI 镜像中没有找到层文件" >&2
-            rm -rf "$OCI_EXTRACT_DIR"
-            exit 1
-        fi
-
-        # Extract each layer into ROOTDIR
-        for layer in $LAYER_FILES; do
-            echo "  提取层: $(basename "$layer")"
-            tar -xf "$layer" -C "$ROOTDIR/" --keep-directory-symlink
-        done
-        rm -rf "$OCI_EXTRACT_DIR"
+        extract_oci_rootfs "$OCI_TAR" "$ROOTDIR"
         rm -f "$OCI_TAR"
 
         setup_dns "$ROOTDIR" 8.8.8.8 1.1.1.1
