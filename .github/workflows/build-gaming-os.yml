@@ -54,7 +54,7 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
 
       - name: 生成 Release Tag
         id: tag
