@@ -178,14 +178,10 @@ install_gaming_base() {
     local rootdir="$1"
 
     echo "正在安装游戏系统基础依赖..."
-    chroot "$rootdir" dnf -y install \
+    chroot "$ROOTDIR" dnf -y install \
         alsa-lib \
-        alsa-plugins-pulseaudio \
-        pulseaudio \
         pipewire \
         pipewire-alsa \
-        pipewire-pulseaudio \
-        pipewire-jack-audio-connection-kit \
         wireplumber \
         libevdev \
         libinput \
